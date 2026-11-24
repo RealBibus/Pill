@@ -3,25 +3,24 @@
                     xmlns:conv="clr-namespace:Pill.Converters">
 
     <conv:LevelToHeightConverter x:Key="LevelToHeight" />
+    <conv:LevelToVisibilityConverter x:Key="LevelToVisibility" />
     <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+    <conv:ColorToBrushConverter x:Key="ColorToBrush" />
 
-    <!-- Одна спокойная акцентная краска: почти белый. Никаких градиентов-радуг. -->
-    <SolidColorBrush x:Key="AccentBrush" Color="#FFDCE4EE" />
-
-    <LinearGradientBrush x:Key="PillBackground" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="#F21B1D22" Offset="0" />
-        <GradientStop Color="#FA0D0E12" Offset="0.55" />
-        <GradientStop Color="#FC07080A" Offset="1" />
+    
+    <LinearGradientBrush x:Key="PillBackground" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#FF141A2B" Offset="0" />
+        <GradientStop Color="#FF090D16" Offset="0.35" />
+        <GradientStop Color="#FF020305" Offset="1" />
     </LinearGradientBrush>
 
-    <SolidColorBrush x:Key="PillStroke" Color="#24FFFFFF" />
-    <SolidColorBrush x:Key="TextPrimary" Color="#FFF2F4F8" />
-    <SolidColorBrush x:Key="TextSecondary" Color="#FFADB6C2" />
-    <SolidColorBrush x:Key="TextDim" Color="#FF737D89" />
+    <SolidColorBrush x:Key="TextPrimary" Color="#FFF4F4F4" />
+    <SolidColorBrush x:Key="TextSecondary" Color="#FFB4B4B4" />
+    <SolidColorBrush x:Key="TextDim" Color="#FF7A7A7A" />
     <SolidColorBrush x:Key="SurfaceSoft" Color="#0EFFFFFF" />
     <SolidColorBrush x:Key="SurfaceHover" Color="#1AFFFFFF" />
 
-    <!-- Иконки -->
+    
     <Geometry x:Key="IconPlay">M7,4 L20,12 L7,20 Z</Geometry>
     <Geometry x:Key="IconPause">M6,4 h4 v16 h-4 Z M14,4 h4 v16 h-4 Z</Geometry>
     <Geometry x:Key="IconPrevious">M5,4 v16 M19,4 L9,12 L19,20 Z</Geometry>
@@ -29,9 +28,12 @@
     <Geometry x:Key="IconClose">M5,5 L15,15 M15,5 L5,15</Geometry>
     <Geometry x:Key="IconChevron">M4,8 L10,14 L16,8</Geometry>
     <Geometry x:Key="IconClip">M9,3 a3,3 0 0,0 -3,3 v8 a5,5 0 0,0 10,0 V8 h-2 v6 a3,3 0 0,1 -6,0 V6 a1,1 0 0,1 2,0 v8 h2 V6 a3,3 0 0,0 -3,-3 Z</Geometry>
-    <Geometry x:Key="IconPin">M8,3 L12,3 L12,10 L15,14 L9,14 L8,3 Z M12,14 v5</Geometry>
+    <Geometry x:Key="IconPalette">M12,3 a9,9 0 0,0 0,18 h1.5 a2,2 0 0,0 1.8,-2.9 a2,2 0 0,1 1.8,-2.9 H19 a2,2 0 0,0 2,-2 A9,9 0 0,0 12,3 Z M7.5,11.5 a1.2,1.2 0 1,1 0,-2.4 a1.2,1.2 0 0,1 0,2.4 Z M10.5,8 a1.2,1.2 0 1,1 0,-2.4 a1.2,1.2 0 0,1 0,2.4 Z M14.5,7.5 a1.2,1.2 0 1,1 0,-2.4 a1.2,1.2 0 0,1 0,2.4 Z</Geometry>
+    <Geometry x:Key="IconTrash">M5,7 H19 M9,7 V5 H15 V7 M7,7 L8,20 H16 L17,7 M10.5,10.5 V17 M13.5,10.5 V17</Geometry>
+    <Geometry x:Key="IconMouse">M12,3 a6,6 0 0,0 -6,6 v6 a6,6 0 0,0 12,0 V9 a6,6 0 0,0 -6,-6 Z M12,3 v6</Geometry>
+    <Geometry x:Key="IconHeadphones">M5,13 v-2 a7,7 0 0,1 14,0 v2 M5,13 h3 v6 H6 a1,1 0 0,1 -1,-1 Z M19,13 h-3 v6 h2 a1,1 0 0,0 1,-1 Z</Geometry>
 
-    <!-- Текст -->
+    
     <Style x:Key="Caption" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{StaticResource TextDim}" />
         <Setter Property="FontSize" Value="9.5" />
@@ -44,7 +46,7 @@
         <Setter Property="TextTrimming" Value="CharacterEllipsis" />
     </Style>
 
-    <!-- Кнопки -->
+    
     <Style x:Key="PlayerButton" TargetType="Button">
         <Setter Property="Width" Value="40" />
         <Setter Property="Height" Value="40" />
@@ -93,12 +95,12 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="Bd" CornerRadius="14" Background="{StaticResource AccentBrush}">
+                    <Border x:Name="Bd" CornerRadius="14" Background="{Binding AccentDeepBrush, RelativeSource={RelativeSource AncestorType={x:Type Window}}}">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="#FFF4F7FB" />
+                            <Setter TargetName="Bd" Property="Background" Value="#FFF4F4F4" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.4" />
@@ -110,25 +112,32 @@
     </Style>
 
     <Style x:Key="TinyButton" TargetType="Button">
-        <Setter Property="Width" Value="24" />
-        <Setter Property="Height" Value="24" />
+        <Setter Property="Width" Value="26" />
+        <Setter Property="Height" Value="26" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Foreground" Value="{StaticResource TextSecondary}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="Bd" CornerRadius="8" Background="Transparent">
+                    <Border x:Name="Bd" CornerRadius="9" Background="Transparent"
+                            BorderThickness="1" BorderBrush="Transparent">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Bd" Property="Background" Value="{StaticResource SurfaceHover}" />
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{Binding AccentBrush, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" />
                             <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+
+    <Style x:Key="HeaderButton" TargetType="Button" BasedOn="{StaticResource TinyButton}">
+        <Setter Property="Width" Value="28" />
+        <Setter Property="Height" Value="28" />
     </Style>
 
     <Style TargetType="ScrollBar">

@@ -6,10 +6,6 @@ using Pill.Services;
 
 namespace Pill.Controls;
 
-/// <summary>
-/// Минималистичный oscilloscope: одна линия по буферу AudioEqualizer.
-/// Обновляется вместе с кадрами WPF и не создаёт объектов на каждый тик.
-/// </summary>
 public sealed class WaveformControl : Control
 {
     public static readonly DependencyProperty AudioSourceProperty = DependencyProperty.Register(

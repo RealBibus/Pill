@@ -6,7 +6,6 @@ using System.Windows.Media.Imaging;
 
 namespace Pill.Services;
 
-/// <summary>Достаём системную иконку файла через SHGetFileInfo.</summary>
 internal static class IconHelper
 {
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]

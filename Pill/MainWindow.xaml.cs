@@ -11,6 +11,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using Pill.Models;
+using Pill.Services;
 using Pill.ViewModels;
 using WinFormsContextMenuStrip = System.Windows.Forms.ContextMenuStrip;
 using WinFormsNotifyIcon = System.Windows.Forms.NotifyIcon;
@@ -28,10 +29,10 @@ namespace Pill;
 
 public partial class MainWindow : Window
 {
-    private const double CollapsedWidth = 354;
-    private const double CollapsedHeight = 84;
-    private const double ExpandedWidth = 500;
-    private const double ExpandedHeight = 350;
+    private const double CollapsedWidth = 380;
+    private const double CollapsedHeight = 66;
+    private const double ExpandedWidth = 480;
+    private const double ExpandedHeight = 330;
 
     private readonly MainViewModel _viewModel = new();
     private readonly DispatcherTimer _hoverTimer;
@@ -40,17 +41,28 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _dragLeaveTimer;
 
     private Storyboard? _stateStoryboard;
-    private bool _sizeAnimating;
-    private long _sizeStartMs;
-    private int _sizeDurationMs;
-    private double _sizeFromWidth, _sizeFromHeight, _sizeToWidth, _sizeToHeight;
-    private EasingFunctionBase _sizeEase = new CubicEase();
+    private readonly SolidColorBrush _accentBrush =
+        new(System.Windows.Media.Color.FromArgb(255, 91, 140, 255));
+    private readonly SolidColorBrush _accentBackgroundBrush =
+        new(AmbientColorService.BaseAccent);
+    private readonly SolidColorBrush _accentSoftBrush =
+        new(System.Windows.Media.Color.FromArgb(255, 159, 188, 255));
+    private readonly SolidColorBrush _accentDeepBrush =
+        new(System.Windows.Media.Color.FromArgb(255, 46, 90, 168));
+
+    public SolidColorBrush AccentBrush => _accentBrush;
+    public SolidColorBrush AccentBackgroundBrush => _accentBackgroundBrush;
+    public SolidColorBrush AccentSoftBrush => _accentSoftBrush;
+    public SolidColorBrush AccentDeepBrush => _accentDeepBrush;
+
     private WinFormsNotifyIcon? _tray;
     private WinFormsContextMenuStrip? _trayMenu;
+    private WinFormsToolStripMenuItem? _ambientMenuItem;
+    private WinFormsToolStripMenuItem? _autoStartMenuItem;
+    private WinFormsToolStripMenuItem? _autoUpdateMenuItem;
     private TrayIcon? _trayIcon;
 
     private bool _expanded;
-    private bool _pinned;
     private bool _dragActive;
     private bool _draggingOut;
     private bool _suppressAutoExpand;
@@ -63,56 +75,66 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContext = _viewModel;
+        _viewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(MainViewModel.AmbientColor) or nameof(MainViewModel.AmbientColorEnabled))
+            {
+                System.Windows.Media.Color main = _viewModel.AmbientColor;
+                AnimateAccent(_accentBackgroundBrush, main);
+                AnimateAccent(_accentBrush, main);
+                AnimateAccent(_accentSoftBrush, AmbientColorService.Lift(main));
+                AnimateAccent(_accentDeepBrush, AmbientColorService.Deepen(main));
+                if (_ambientMenuItem is not null) _ambientMenuItem.Checked = _viewModel.AmbientColorEnabled;
+            }
+            else if (e.PropertyName == nameof(MainViewModel.AutoStart) && _autoStartMenuItem is not null)
+            {
+                _autoStartMenuItem.Checked = _viewModel.AutoStart;
+            }
+            else if (e.PropertyName == nameof(MainViewModel.AutoUpdate) && _autoUpdateMenuItem is not null)
+            {
+                _autoUpdateMenuItem.Checked = _viewModel.AutoUpdate;
+            }
+        };
 
-        _hoverTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(140) };
+        _hoverTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(60) };
         _hoverTimer.Tick += (_, _) => { _hoverTimer.Stop(); Expand(); };
 
-        // MouseLeave при смене hit-test слоёв приходит один раз и бывает ложным.
-        // Опрос реальной позиции курсора гарантирует сворачивание при уходе.
-        _hoverWatchTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
+        _hoverWatchTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(60) };
         _hoverWatchTimer.Tick += OnHoverWatchTick;
         _hoverWatchTimer.Start();
 
-        _collapseTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(420) };
+        _collapseTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(180) };
         _collapseTimer.Tick += OnCollapseTimerTick;
 
-        _dragLeaveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(260) };
+        _dragLeaveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(160) };
         _dragLeaveTimer.Tick += (_, _) =>
         {
             _dragLeaveTimer.Stop();
             _dragActive = false;
             AnimateOpacity(DropOutline, 0, 180);
-            ScheduleCollapse(_viewModel.HasShelfItems ? 6000 : 250);
+            ScheduleCollapse(_viewModel.HasShelfItems ? 1800 : 160);
         };
 
         SourceInitialized += (_, _) => PositionAtTopCenter();
-        SizeChanged += (_, _) =>
-        {
-            if (IsLoaded)
-                Left = SystemParameters.WorkArea.Left + (SystemParameters.WorkArea.Width - ActualWidth) / 2;
-        };
         Loaded += (_, _) =>
         {
             PositionAtTopCenter();
+            _viewModel.SetColorExclusion((int)Left, (int)Top, (int)Width, (int)Height);
             _viewModel.Start();
             SetupTray();
         };
         Closing += MainWindow_Closing;
     }
 
-    // ------------------------------------------------------------------
-    // Позиционирование и анимация состояния
-    // ------------------------------------------------------------------
-
     private void PositionAtTopCenter()
     {
-        Left = SystemParameters.WorkArea.Left + (SystemParameters.WorkArea.Width - ActualWidth) / 2;
-        Top = -8;
+        Left = SystemParameters.WorkArea.Left + (SystemParameters.WorkArea.Width - ExpandedWidth) / 2;
+        Top = 0;
     }
 
     private void Expand()
     {
-        if (_expanded || _suppressAutoExpand && !_pinned) return;
+        if (_expanded || _suppressAutoExpand) return;
         _expanded = true;
         ExpandedRoot.IsHitTestVisible = true;
         CompactRoot.IsHitTestVisible = false;
@@ -122,7 +144,7 @@ public partial class MainWindow : Window
 
     private void Collapse(bool force = false)
     {
-        if (!force && (_pinned || _dragActive || _viewModel.HasShelfItems)) return;
+        if (!force && (_dragActive || _viewModel.HasShelfItems)) return;
         if (!_expanded) return;
 
         _expanded = false;
@@ -134,66 +156,59 @@ public partial class MainWindow : Window
 
     private void AnimateState(double width, double height, double compactOpacity, double expandedOpacity, bool expand)
     {
-        // WPF не применяет анимированную Height нативного окна до конца анимации,
-        // поэтому размер ведём вручную покадрово — Width и Height идут синхронно.
-        double fromWidth = ActualWidth > 0 ? ActualWidth : Width;
-        double fromHeight = ActualHeight > 0 ? ActualHeight : Height;
+        double fromWidth = Pill.ActualWidth > 0 ? Pill.ActualWidth : Pill.Width;
+        double fromHeight = Pill.ActualHeight > 0 ? Pill.ActualHeight : Pill.Height;
         double fromCompactOpacity = CompactRoot.Opacity;
         double fromExpandedOpacity = ExpandedRoot.Opacity;
+        double fromShift = ExpandedShift.Y;
 
         _stateStoryboard?.Stop(this);
-        BeginAnimation(WidthProperty, null);
-        BeginAnimation(HeightProperty, null);
+        Pill.BeginAnimation(FrameworkElement.WidthProperty, null);
+        Pill.BeginAnimation(FrameworkElement.HeightProperty, null);
+        ExpandedShift.BeginAnimation(TranslateTransform.YProperty, null);
 
-        Width = fromWidth;
-        Height = fromHeight;
+        Pill.Width = fromWidth;
+        Pill.Height = fromHeight;
         CompactRoot.Opacity = fromCompactOpacity;
         ExpandedRoot.Opacity = fromExpandedOpacity;
 
-        _sizeFromWidth = fromWidth;
-        _sizeFromHeight = fromHeight;
-        _sizeToWidth = width;
-        _sizeToHeight = height;
-        _sizeDurationMs = expand ? 520 : 420;
-        _sizeEase = expand
+        var storyboard = new Storyboard();
+        EasingFunctionBase sizeEase = expand
             ? new CircleEase { EasingMode = EasingMode.EaseOut }
             : new CubicEase { EasingMode = EasingMode.EaseInOut };
-        _sizeStartMs = Environment.TickCount64;
-
-        if (!_sizeAnimating)
-        {
-            _sizeAnimating = true;
-            CompositionTarget.Rendering += OnSizeFrame;
-        }
-
-        var storyboard = new Storyboard();
         EasingFunctionBase fadeEase = new CubicEase { EasingMode = EasingMode.EaseInOut };
 
+        AddDouble(storyboard, Pill, FrameworkElement.WidthProperty, fromWidth, width, expand ? 560 : 440, sizeEase);
+        AddDouble(storyboard, Pill, FrameworkElement.HeightProperty, fromHeight, height, expand ? 520 : 420, sizeEase);
+
         AddDouble(storyboard, CompactRoot, UIElement.OpacityProperty, fromCompactOpacity, compactOpacity,
-            expand ? 180 : 280, fadeEase);
+            expand ? 180 : 260, fadeEase);
         AddDouble(storyboard, ExpandedRoot, UIElement.OpacityProperty, fromExpandedOpacity, expandedOpacity,
-            expand ? 340 : 150, fadeEase,
-            begin: TimeSpan.FromMilliseconds(expand ? 120 : 0));
+            expand ? 320 : 160, fadeEase,
+            begin: TimeSpan.FromMilliseconds(expand ? 90 : 0));
+        AddDouble(storyboard, ExpandedShift, TranslateTransform.YProperty, fromShift, expand ? 0 : 12,
+            expand ? 420 : 220, fadeEase,
+            begin: TimeSpan.FromMilliseconds(expand ? 70 : 0));
 
         _stateStoryboard = storyboard;
         storyboard.Begin(this, true);
+
+        if (expand) AnimateSheen();
     }
 
-    private void OnSizeFrame(object? sender, EventArgs e)
+    private void AnimateSheen()
     {
-        double progress = Math.Min(1.0, (Environment.TickCount64 - _sizeStartMs) / (double)_sizeDurationMs);
-        double eased = _sizeEase.Ease(progress);
+        SheenShift.BeginAnimation(TranslateTransform.XProperty,
+            new DoubleAnimation(-180, 420, TimeSpan.FromMilliseconds(760))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            });
 
-        Width = _sizeFromWidth + (_sizeToWidth - _sizeFromWidth) * eased;
-        Height = _sizeFromHeight + (_sizeToHeight - _sizeFromHeight) * eased;
-
-        if (progress >= 1.0)
-        {
-            Width = _sizeToWidth;
-            Height = _sizeToHeight;
-            _sizeAnimating = false;
-            CompositionTarget.Rendering -= OnSizeFrame;
-        }
+        var fade = new DoubleAnimationUsingKeyFrames { FillBehavior = FillBehavior.Stop };
+        fade.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromPercent(0)));
+        fade.KeyFrames.Add(new LinearDoubleKeyFrame(0.5, KeyTime.FromPercent(0.25)));
+        fade.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromPercent(1)));
+        Sheen.BeginAnimation(UIElement.OpacityProperty, fade);
     }
 
     private static void AddDouble(Storyboard storyboard, DependencyObject target, DependencyProperty property,
@@ -208,6 +223,15 @@ public partial class MainWindow : Window
         Storyboard.SetTarget(animation, target);
         Storyboard.SetTargetProperty(animation, new PropertyPath(property));
         storyboard.Children.Add(animation);
+    }
+
+    private static void AnimateAccent(SolidColorBrush brush, System.Windows.Media.Color color)
+    {
+        brush.BeginAnimation(SolidColorBrush.ColorProperty,
+            new ColorAnimation(color, TimeSpan.FromMilliseconds(320))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }
+            });
     }
 
     private void AnimateOpacity(UIElement element, double to, int milliseconds)
@@ -229,17 +253,22 @@ public partial class MainWindow : Window
     private void OnCollapseTimerTick(object? sender, EventArgs e)
     {
         _collapseTimer.Stop();
-        if (_pinned || _dragActive || _draggingOut) return;
+        if (_dragActive || _draggingOut) return;
         Collapse(force: true);
+    }
+
+    private Rect PillBounds()
+    {
+        GeneralTransform transform = Pill.TransformToVisual(this);
+        return transform.TransformBounds(new Rect(0, 0, Pill.ActualWidth, Pill.ActualHeight));
     }
 
     private void OnHoverWatchTick(object? sender, EventArgs e)
     {
-        if (!IsVisible || !_expanded || _pinned || _dragActive || _draggingOut) return;
+        if (!IsVisible || !_expanded || _dragActive || _draggingOut) return;
 
         Point position = Mouse.GetPosition(this);
-        bool inside = position.X >= 0 && position.X <= ActualWidth &&
-                      position.Y >= 0 && position.Y <= ActualHeight;
+        bool inside = PillBounds().Contains(position);
 
         if (inside)
         {
@@ -247,13 +276,9 @@ public partial class MainWindow : Window
         }
         else if (!_collapseTimer.IsEnabled)
         {
-            ScheduleCollapse(_viewModel.HasShelfItems ? 6000 : 420);
+            ScheduleCollapse(_viewModel.HasShelfItems ? 1800 : 180);
         }
     }
-
-    // ------------------------------------------------------------------
-    // Мышь
-    // ------------------------------------------------------------------
 
     private void Root_MouseEnter(object sender, MouseEventArgs e)
     {
@@ -269,13 +294,9 @@ public partial class MainWindow : Window
         _hoverTimer.Stop();
         if (_draggingOut || _dragActive) return;
 
-        // При смене hit-test у дочерних слоёв WPF может прислать ложный MouseLeave.
-        Point position = e.GetPosition(this);
-        if (position.X >= 0 && position.X <= ActualWidth &&
-            position.Y >= 0 && position.Y <= ActualHeight)
-            return;
+        if (PillBounds().Contains(e.GetPosition(this))) return;
 
-        ScheduleCollapse(_viewModel.HasShelfItems ? 6000 : 420);
+        ScheduleCollapse(_viewModel.HasShelfItems ? 1800 : 180);
     }
 
     private void Root_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -284,29 +305,26 @@ public partial class MainWindow : Window
             (FindAncestor<Button>(source) is not null || FindAncestor<ItemsControl>(source) is not null))
             return;
 
-        SetPinned(!_pinned);
+        _collapseTimer.Stop();
+        if (_expanded)
+        {
+            if (!_viewModel.HasShelfItems && !_dragActive) Collapse(force: true);
+        }
+        else Expand();
     }
 
-    private void PinButton_Click(object sender, RoutedEventArgs e) => SetPinned(!_pinned);
+    private void AmbientButton_Click(object sender, RoutedEventArgs e)
+        => _viewModel.AmbientColorEnabled = !_viewModel.AmbientColorEnabled;
 
-    private void SetPinned(bool pinned)
+    private void ClearShelf_Click(object sender, RoutedEventArgs e)
     {
-        _pinned = pinned;
-        if (_pinned)
-        {
-            _suppressAutoExpand = false;
-            _collapseTimer.Stop();
-            Expand();
-        }
-        else
-        {
-            ScheduleCollapse(600);
-        }
+        var items = new System.Collections.Generic.List<ShelfItem>(_viewModel.Shelf);
+        foreach (ShelfItem item in items) _viewModel.Remove(item);
+        ScheduleCollapse(220);
     }
 
     private void CollapseButton_Click(object sender, RoutedEventArgs e)
     {
-        _pinned = false;
         _suppressAutoExpand = true;
         _hoverTimer.Stop();
         Collapse(force: true);
@@ -322,10 +340,6 @@ public partial class MainWindow : Window
         }
         return null;
     }
-
-    // ------------------------------------------------------------------
-    // Dropshelf: файл прилетает сверху и ждёт на полке
-    // ------------------------------------------------------------------
 
     private static bool HasFiles(DragEventArgs e) =>
         e.Data.GetDataPresent(DataFormats.FileDrop) &&
@@ -372,7 +386,7 @@ public partial class MainWindow : Window
         _dragActive = false;
         _dragLeaveTimer.Stop();
         AnimateOpacity(DropOutline, 0, 220);
-        ScheduleCollapse(_viewModel.HasShelfItems ? 7000 : 300);
+        ScheduleCollapse(_viewModel.HasShelfItems ? 2500 : 220);
     }
 
     private void Chip_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -413,7 +427,7 @@ public partial class MainWindow : Window
         finally
         {
             _draggingOut = false;
-            ScheduleCollapse(_viewModel.HasShelfItems ? 6000 : 500);
+            ScheduleCollapse(_viewModel.HasShelfItems ? 1800 : 220);
         }
     }
 
@@ -425,19 +439,11 @@ public partial class MainWindow : Window
             _viewModel.Remove(item);
     }
 
-    // ------------------------------------------------------------------
-    // Плеер
-    // ------------------------------------------------------------------
-
     private async void Previous_Click(object sender, RoutedEventArgs e) => await _viewModel.Media.PreviousAsync();
 
     private async void PlayPause_Click(object sender, RoutedEventArgs e) => await _viewModel.Media.TogglePlayPauseAsync();
 
     private async void Next_Click(object sender, RoutedEventArgs e) => await _viewModel.Media.NextAsync();
-
-    // ------------------------------------------------------------------
-    // Трей и завершение
-    // ------------------------------------------------------------------
 
     private void SetupTray()
     {
@@ -446,15 +452,43 @@ public partial class MainWindow : Window
             _trayIcon = CreateTrayIcon();
             _trayMenu = new WinFormsContextMenuStrip
             {
-                BackColor = Color.FromArgb(28, 29, 39),
+                BackColor = Color.FromArgb(10, 14, 24),
                 ForeColor = Color.FromArgb(244, 246, 255),
                 ShowImageMargin = false
             };
-            _trayMenu.Items.Add(new WinFormsToolStripMenuItem("Показать / скрыть", null, (_, _) => ToggleVisibility()));
-            _trayMenu.Items.Add(new WinFormsToolStripMenuItem("Закрепить островок", null,
-                (_, _) => SetPinned(!_pinned)));
+            _trayMenu.Items.Add(new WinFormsToolStripMenuItem("Show / hide", null, (_, _) => ToggleVisibility()));
+
+            _ambientMenuItem = new WinFormsToolStripMenuItem("Ambient color")
+            {
+                CheckOnClick = true,
+                Checked = _viewModel.AmbientColorEnabled
+            };
+            _ambientMenuItem.Click += (_, _) => _viewModel.AmbientColorEnabled = _ambientMenuItem.Checked;
+            _trayMenu.Items.Add(_ambientMenuItem);
+
+            _autoStartMenuItem = new WinFormsToolStripMenuItem("Autostart")
+            {
+                CheckOnClick = true,
+                Checked = _viewModel.AutoStart
+            };
+            _autoStartMenuItem.Click += (_, _) => _viewModel.AutoStart = _autoStartMenuItem.Checked;
+            _trayMenu.Items.Add(_autoStartMenuItem);
+
+            _autoUpdateMenuItem = new WinFormsToolStripMenuItem("Auto update (beta)")
+            {
+                CheckOnClick = true,
+                Checked = _viewModel.AutoUpdate
+            };
+            _autoUpdateMenuItem.Click += (_, _) => _viewModel.AutoUpdate = _autoUpdateMenuItem.Checked;
+            _trayMenu.Items.Add(_autoUpdateMenuItem);
+
+            _trayMenu.Items.Add(new WinFormsToolStripMenuItem("Check for updates", null,
+                (_, _) => _ = _viewModel.CheckForUpdatesAsync()));
             _trayMenu.Items.Add(new WinFormsToolStripSeparator());
-            _trayMenu.Items.Add(new WinFormsToolStripMenuItem("Выход", null, (_, _) => Exit()));
+            _trayMenu.Items.Add(new WinFormsToolStripMenuItem("Install", null, (_, _) => _viewModel.Install()));
+            _trayMenu.Items.Add(new WinFormsToolStripMenuItem("Uninstall", null, (_, _) => _viewModel.Uninstall()));
+            _trayMenu.Items.Add(new WinFormsToolStripSeparator());
+            _trayMenu.Items.Add(new WinFormsToolStripMenuItem("Exit", null, (_, _) => Exit()));
 
             _tray = new WinFormsNotifyIcon
             {
@@ -465,10 +499,7 @@ public partial class MainWindow : Window
             };
             _tray.DoubleClick += (_, _) => ToggleVisibility();
         }
-        catch
-        {
-            // трей недоступен — контекстное меню самого островка всё равно работает
-        }
+        catch { }
     }
 
     private void ToggleVisibility()
@@ -487,9 +518,14 @@ public partial class MainWindow : Window
 
     private void MenuToggle_Click(object sender, RoutedEventArgs e) => ToggleVisibility();
 
-    private void MenuPin_Click(object sender, RoutedEventArgs e) => SetPinned(!_pinned);
-
     private void MenuExit_Click(object sender, RoutedEventArgs e) => Exit();
+
+    private void MenuUpdate_Click(object sender, RoutedEventArgs e)
+        => _ = _viewModel.CheckForUpdatesAsync();
+
+    private void MenuInstall_Click(object sender, RoutedEventArgs e) => _viewModel.Install();
+
+    private void MenuUninstall_Click(object sender, RoutedEventArgs e) => _viewModel.Uninstall();
 
     private void Exit()
     {
@@ -517,11 +553,6 @@ public partial class MainWindow : Window
         _collapseTimer.Stop();
         _dragLeaveTimer.Stop();
         _stateStoryboard?.Stop(this);
-        if (_sizeAnimating)
-        {
-            _sizeAnimating = false;
-            CompositionTarget.Rendering -= OnSizeFrame;
-        }
 
         if (_tray is not null)
         {

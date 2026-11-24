@@ -11,11 +11,6 @@ using Pill.Models;
 
 namespace Pill.Services;
 
-/// <summary>
-/// Захват системного вывода через WASAPI Loopback.
-/// Даёт 7 частотных полос и кольцевой буфер формы сигнала для oscilloscope-виджета.
-/// Умеет перебирать устройства вывода и переподключаться, если устройство пропало.
-/// </summary>
 public sealed class AudioEqualizer : ObservableObject, IDisposable
 {
     public const int BandCount = 7;
@@ -46,7 +41,7 @@ public sealed class AudioEqualizer : ObservableObject, IDisposable
     private MMDeviceEnumerator? _enumerator;
     private bool _disposed;
     private bool _isActive;
-    private string _status = "ОЖИДАНИЕ ЗВУКА";
+    private string _status = "WAITING FOR AUDIO";
     private string _deviceName = "";
 
     public ObservableCollection<double> Levels { get; } = new(Enumerable.Repeat(0.04d, BandCount));
@@ -74,10 +69,8 @@ public sealed class AudioEqualizer : ObservableObject, IDisposable
         for (int i = 0; i < FftSize; i++)
             _window[i] = 0.5f * (1f - (float)Math.Cos(2 * Math.PI * i / (FftSize - 1)));
 
-        // Синхронизируем состояние с частотой отображения, а не с фиксированным тиком 24 мс.
         CompositionTarget.Rendering += OnRendering;
 
-        // Если устройство переключили/отключили — пробуем вернуться к захвату.
         _retryTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
         _retryTimer.Tick += (_, _) => { if (!IsActive) Start(); };
         _retryTimer.Start();
@@ -97,7 +90,7 @@ public sealed class AudioEqualizer : ObservableObject, IDisposable
                 MMDevice defaultDevice = _enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
                 candidates.Add(defaultDevice);
             }
-            catch { /*.getDefault может упасть, если устройств нет */ }
+            catch { }
 
             foreach (MMDevice device in _enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active))
             {
@@ -114,23 +107,20 @@ public sealed class AudioEqualizer : ObservableObject, IDisposable
                     capture.StartRecording();
 
                     _capture = capture;
-                    DeviceName = device.FriendlyName ?? "Устройство вывода";
-                    Status = $"LIVE · {capture.WaveFormat.SampleRate / 1000} кГц";
+                    DeviceName = device.FriendlyName ?? "Output device";
+                    Status = $"LIVE · {capture.WaveFormat.SampleRate / 1000} kHz";
                     IsActive = true;
                     return;
                 }
-                catch
-                {
-                    // Это устройство не отдаёт loopback — пробуем следующее.
-                }
+                catch { }
             }
 
-            Status = "НЕТ ДОСТУПНОГО УСТРОЙСТВА";
+            Status = "NO OUTPUT DEVICE";
             IsActive = false;
         }
         catch
         {
-            Status = "ЗАХВАТ НЕДОСТУПЕН";
+            Status = "CAPTURE UNAVAILABLE";
             IsActive = false;
         }
     }
@@ -174,7 +164,6 @@ public sealed class AudioEqualizer : ObservableObject, IDisposable
             }
         }
 
-        // Медленно затухает, чтобы в паузе waveform плавно уходил в idle-дыхание.
         _signalPeak = Math.Max(_signalPeak * 0.97f, framePeak);
     }
 
@@ -227,7 +216,6 @@ public sealed class AudioEqualizer : ObservableObject, IDisposable
                     if (magnitude > peakInBand) peakInBand = magnitude;
                 }
 
-                // Автоматическая нормализация: тихая музыка тоже должна «дышать».
                 _peak = Math.Max(_peak * 0.997f, (float)peakInBand);
                 float level = (float)Math.Clamp(peakInBand / Math.Max(_peak, 0.008d), 0d, 1d);
                 _raw[band] = Math.Max(level, _raw[band] * 0.9f);
@@ -283,7 +271,6 @@ public sealed class AudioEqualizer : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>Копия кольцевого буфера в порядке «старый → новый».</summary>
     public void CopyWaveform(float[] destination)
     {
         if (destination.Length < WaveformLength) return;
@@ -311,7 +298,7 @@ public sealed class AudioEqualizer : ObservableObject, IDisposable
                 capture.StopRecording();
                 capture.Dispose();
             }
-            catch { /* устройство уже отключено */ }
+            catch { }
         }
         _enumerator?.Dispose();
         _enumerator = null;

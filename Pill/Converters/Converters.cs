@@ -2,10 +2,10 @@ using System;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
+using System.Windows.Media;
 
 namespace Pill.Converters;
 
-/// <summary>Преобразует уровень эквалайзера 0..1 в высоту полоски.</summary>
 public sealed class LevelToHeightConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
@@ -22,7 +22,6 @@ public sealed class LevelToHeightConverter : IValueConverter
         => Binding.DoNothing;
 }
 
-/// <summary>Visibility из bool, с возможностью инверсии параметром "invert".</summary>
 public sealed class BoolToVisibilityConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
@@ -32,6 +31,29 @@ public sealed class BoolToVisibilityConverter : IValueConverter
             flag = !flag;
         return flag ? Visibility.Visible : Visibility.Collapsed;
     }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => Binding.DoNothing;
+}
+
+public sealed class LevelToVisibilityConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        int level = value is int number ? number : 0;
+        int bar = 1;
+        if (parameter is string text && int.TryParse(text, out int parsed)) bar = parsed;
+        return level >= bar ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => Binding.DoNothing;
+}
+
+public sealed class ColorToBrushConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is Color color ? new SolidColorBrush(color) : new SolidColorBrush(Colors.Transparent);
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => Binding.DoNothing;

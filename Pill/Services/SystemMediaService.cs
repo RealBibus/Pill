@@ -10,11 +10,6 @@ using Windows.Media.Control;
 
 namespace Pill.Services;
 
-/// <summary>
-/// Подключение к системному медиа-контролу Windows (SMTC).
-/// Работает со Spotify, браузерами, Яндекс Музыкой и любым плеером,
-/// который публикует состояние через Windows Media Controls.
-/// </summary>
 public sealed class SystemMediaService : ObservableObject, IDisposable
 {
     private GlobalSystemMediaTransportControlsSessionManager? _manager;
@@ -24,9 +19,12 @@ public sealed class SystemMediaService : ObservableObject, IDisposable
     private readonly DispatcherTimer _timelineTimer;
     private TimeSpan _position;
     private TimeSpan _duration;
+    private TimeSpan _reportedPosition;
+    private DateTime _positionStamp;
+    private bool _positionPrimed;
 
-    private string _title = "Ничего не играет";
-    private string _artist = "Наведите курсор или кликните по островку";
+    private string _title = "Nothing playing";
+    private string _artist = "Hover or click the island";
     private string _album = "";
     private string _source = "SYSTEM PLAYER";
     private ImageSource? _cover;
@@ -55,7 +53,7 @@ public sealed class SystemMediaService : ObservableObject, IDisposable
 
     public SystemMediaService()
     {
-        _timelineTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(900) };
+        _timelineTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
         _timelineTimer.Tick += (_, _) => UpdateTimeline();
         _timelineTimer.Start();
     }
@@ -73,6 +71,7 @@ public sealed class SystemMediaService : ObservableObject, IDisposable
             {
                 _position = TimeSpan.Zero;
                 _duration = TimeSpan.Zero;
+                _positionPrimed = false;
                 RaiseProgress();
             }
             return;
@@ -81,14 +80,26 @@ public sealed class SystemMediaService : ObservableObject, IDisposable
         try
         {
             var timeline = session.GetTimelineProperties();
-            _position = timeline.Position;
+            TimeSpan reported = timeline.Position;
             _duration = timeline.EndTime - timeline.StartTime;
+            DateTime now = DateTime.UtcNow;
+
+            if (!_positionPrimed || reported != _reportedPosition || !_isPlaying)
+            {
+                _position = reported;
+                _reportedPosition = reported;
+                _positionStamp = now;
+                _positionPrimed = true;
+            }
+            else
+            {
+                _position = _reportedPosition + (now - _positionStamp);
+                if (_duration > TimeSpan.Zero && _position > _duration)
+                    _position = _duration;
+            }
             RaiseProgress();
         }
-        catch
-        {
-            // сессия могла исчезнуть
-        }
+        catch { }
     }
 
     private void RaiseProgress()
@@ -109,10 +120,7 @@ public sealed class SystemMediaService : ObservableObject, IDisposable
             _manager.SessionsChanged += OnSessionsChanged;
             Attach(_manager.GetCurrentSession());
         }
-        catch
-        {
-            // SMTC недоступен — оставляем дефолтные значения и медиа-клавиши как фолбэк.
-        }
+        catch { }
     }
 
     private void OnCurrentSessionChanged(GlobalSystemMediaTransportControlsSessionManager sender,
@@ -139,6 +147,7 @@ public sealed class SystemMediaService : ObservableObject, IDisposable
 
         DetachSession();
         _session = session;
+        _positionPrimed = false;
 
         if (session is not null)
         {
@@ -176,8 +185,8 @@ public sealed class SystemMediaService : ObservableObject, IDisposable
 
         if (session is null)
         {
-            Title = "Ничего не играет";
-            Artist = "Запустите Spotify, браузер или Яндекс Музыку";
+            Title = "Nothing playing";
+            Artist = "Start Spotify, a browser or Yandex Music";
             Album = "";
             Source = "SYSTEM PLAYER";
             Cover = null;
@@ -192,10 +201,13 @@ public sealed class SystemMediaService : ObservableObject, IDisposable
             var props = await session.TryGetMediaPropertiesAsync();
             if (_disposed || version != _version) return;
 
-            string title = string.IsNullOrWhiteSpace(props.Title) ? "Неизвестный трек" : props.Title.Trim();
+            string title = string.IsNullOrWhiteSpace(props.Title) ? "Unknown track" : props.Title.Trim();
             string artist = string.IsNullOrWhiteSpace(props.Artist)
-                ? (string.IsNullOrWhiteSpace(props.Subtitle) ? "Исполнитель не указан" : props.Subtitle.Trim())
+                ? (string.IsNullOrWhiteSpace(props.Subtitle) ? "Unknown artist" : props.Subtitle.Trim())
                 : props.Artist.Trim();
+
+            if (!string.Equals(Title, title, StringComparison.Ordinal))
+                _positionPrimed = false;
 
             Title = title;
             Artist = artist;
@@ -206,27 +218,28 @@ public sealed class SystemMediaService : ObservableObject, IDisposable
             if (_disposed || version != _version) return;
             Cover = art;
         }
-        catch
-        {
-            // сессия могла закрыться между вызовами
-        }
+        catch { }
 
         try
         {
             var info = session.GetPlaybackInfo();
             if (_disposed || version != _version) return;
 
+            bool wasPlaying = _isPlaying;
             IsPlaying = info.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
+            if (wasPlaying != _isPlaying)
+            {
+                _reportedPosition = _position;
+                _positionStamp = DateTime.UtcNow;
+                _positionPrimed = true;
+            }
             CanPlay = info.Controls.IsPlayEnabled;
             CanPause = info.Controls.IsPauseEnabled;
             CanNext = info.Controls.IsNextEnabled;
             CanPrevious = info.Controls.IsPreviousEnabled;
             UpdateTimeline();
         }
-        catch
-        {
-            // ignored
-        }
+        catch { }
     }
 
     private static async Task<ImageSource?> LoadCoverAsync(Windows.Storage.Streams.IRandomAccessStreamReference? reference)
@@ -283,9 +296,9 @@ public sealed class SystemMediaService : ObservableObject, IDisposable
                     return;
                 }
             }
-            catch { /* fall through to media keys */ }
+            catch { }
         }
-        SendMediaKey(0xB3); // VK_MEDIA_PLAY_PAUSE
+        SendMediaKey(0xB3);
     }
 
     public async Task NextAsync()
@@ -303,7 +316,7 @@ public sealed class SystemMediaService : ObservableObject, IDisposable
             }
             catch { }
         }
-        SendMediaKey(0xB0); // VK_MEDIA_NEXT_TRACK
+        SendMediaKey(0xB0);
     }
 
     public async Task PreviousAsync()
@@ -321,7 +334,7 @@ public sealed class SystemMediaService : ObservableObject, IDisposable
             }
             catch { }
         }
-        SendMediaKey(0xB1); // VK_MEDIA_PREV_TRACK
+        SendMediaKey(0xB1);
     }
 
     [DllImport("user32.dll")]
@@ -330,7 +343,7 @@ public sealed class SystemMediaService : ObservableObject, IDisposable
     private static void SendMediaKey(byte virtualKey)
     {
         keybd_event(virtualKey, 0, 0, UIntPtr.Zero);
-        keybd_event(virtualKey, 0, 2, UIntPtr.Zero); // KEYEVENTF_KEYUP
+        keybd_event(virtualKey, 0, 2, UIntPtr.Zero);
     }
 
     public void Dispose()

@@ -6,7 +6,6 @@ using Pill.Services;
 
 namespace Pill.Models;
 
-/// <summary>Файл, который лежит на полке островка.</summary>
 public sealed class ShelfItem
 {
     public ShelfItem(string path)
@@ -26,19 +25,19 @@ public sealed class ShelfItem
     {
         try
         {
-            if (Directory.Exists(path)) return "папка";
+            if (Directory.Exists(path)) return "folder";
             var info = new FileInfo(path);
-            return info.Exists ? FormatSize(info.Length) : "файл";
+            return info.Exists ? FormatSize(info.Length) : "file";
         }
         catch
         {
-            return "файл";
+            return "file";
         }
     }
 
     private static string FormatSize(long bytes)
     {
-        string[] units = { "Б", "КБ", "МБ", "ГБ" };
+        string[] units = { "B", "KB", "MB", "GB" };
         double value = bytes;
         int i = 0;
         while (value >= 1024 && i < units.Length - 1)
