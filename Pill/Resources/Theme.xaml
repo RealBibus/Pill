@@ -1,0 +1,158 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:conv="clr-namespace:Pill.Converters">
+
+    <conv:LevelToHeightConverter x:Key="LevelToHeight" />
+    <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+
+    <!-- Одна спокойная акцентная краска: почти белый. Никаких градиентов-радуг. -->
+    <SolidColorBrush x:Key="AccentBrush" Color="#FFDCE4EE" />
+
+    <LinearGradientBrush x:Key="PillBackground" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#F21B1D22" Offset="0" />
+        <GradientStop Color="#FA0D0E12" Offset="0.55" />
+        <GradientStop Color="#FC07080A" Offset="1" />
+    </LinearGradientBrush>
+
+    <SolidColorBrush x:Key="PillStroke" Color="#24FFFFFF" />
+    <SolidColorBrush x:Key="TextPrimary" Color="#FFF2F4F8" />
+    <SolidColorBrush x:Key="TextSecondary" Color="#FFADB6C2" />
+    <SolidColorBrush x:Key="TextDim" Color="#FF737D89" />
+    <SolidColorBrush x:Key="SurfaceSoft" Color="#0EFFFFFF" />
+    <SolidColorBrush x:Key="SurfaceHover" Color="#1AFFFFFF" />
+
+    <!-- Иконки -->
+    <Geometry x:Key="IconPlay">M7,4 L20,12 L7,20 Z</Geometry>
+    <Geometry x:Key="IconPause">M6,4 h4 v16 h-4 Z M14,4 h4 v16 h-4 Z</Geometry>
+    <Geometry x:Key="IconPrevious">M5,4 v16 M19,4 L9,12 L19,20 Z</Geometry>
+    <Geometry x:Key="IconNext">M19,4 v16 M5,4 L15,12 L5,20 Z</Geometry>
+    <Geometry x:Key="IconClose">M5,5 L15,15 M15,5 L5,15</Geometry>
+    <Geometry x:Key="IconChevron">M4,8 L10,14 L16,8</Geometry>
+    <Geometry x:Key="IconClip">M9,3 a3,3 0 0,0 -3,3 v8 a5,5 0 0,0 10,0 V8 h-2 v6 a3,3 0 0,1 -6,0 V6 a1,1 0 0,1 2,0 v8 h2 V6 a3,3 0 0,0 -3,-3 Z</Geometry>
+    <Geometry x:Key="IconPin">M8,3 L12,3 L12,10 L15,14 L9,14 L8,3 Z M12,14 v5</Geometry>
+
+    <!-- Текст -->
+    <Style x:Key="Caption" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource TextDim}" />
+        <Setter Property="FontSize" Value="9.5" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <Style x:Key="SmallText" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource TextSecondary}" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <!-- Кнопки -->
+    <Style x:Key="PlayerButton" TargetType="Button">
+        <Setter Property="Width" Value="40" />
+        <Setter Property="Height" Value="40" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="12">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource SurfaceHover}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.28" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="RenderTransform">
+                    <Setter.Value>
+                        <ScaleTransform ScaleX="1.06" ScaleY="1.06" />
+                    </Setter.Value>
+                </Setter>
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter Property="RenderTransform">
+                    <Setter.Value>
+                        <ScaleTransform ScaleX="0.94" ScaleY="0.94" />
+                    </Setter.Value>
+                </Setter>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style x:Key="PrimaryPlayerButton" TargetType="Button" BasedOn="{StaticResource PlayerButton}">
+        <Setter Property="Width" Value="46" />
+        <Setter Property="Height" Value="46" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" CornerRadius="14" Background="{StaticResource AccentBrush}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#FFF4F7FB" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="TinyButton" TargetType="Button">
+        <Setter Property="Width" Value="24" />
+        <Setter Property="Height" Value="24" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Foreground" Value="{StaticResource TextSecondary}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" CornerRadius="8" Background="Transparent">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource SurfaceHover}" />
+                            <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="ScrollBar">
+        <Setter Property="Width" Value="3" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ScrollBar">
+                    <Grid>
+                        <Track x:Name="PART_Track" IsDirectionReversed="True">
+                            <Track.Thumb>
+                                <Thumb>
+                                    <Thumb.Template>
+                                        <ControlTemplate TargetType="Thumb">
+                                            <Border Background="#30FFFFFF" CornerRadius="2" />
+                                        </ControlTemplate>
+                                    </Thumb.Template>
+                                </Thumb>
+                            </Track.Thumb>
+                        </Track>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>
