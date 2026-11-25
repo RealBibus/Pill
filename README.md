@@ -1,88 +1,92 @@
-# Pill — Dynamic Island для Windows
+# Pill
 
-Нативная WPF-программа (Windows 10 1809+, .NET 10): плавающая «капсула» у верхнего края экрана с плеером, живым эквалайзером и полкой для файлов.
+Pill is a Windows topmost media capsule. Requires Windows 10 1809+ and .NET 10.
 
-## Возможности
+## Screenshots
 
-- **Topmost-островок.** Корпус чёрный: непрозрачный градиент `#141A2B` сверху (чуть светлее), `#090D16` и `#020305` книзу, без рамки и квадратных углов у акцентных подложек; акцентная подложка приглушена до `16%`, чтобы не осветлять фон; она плавно переходит к новому цвету вместе с кнопками за 320 мс, всегда совпадает с ними и не уходит в фиолетовый при тёмно-красном акценте. Акцент по умолчанию синий (`#5B8CFF`), а не серый. Интерфейс полностью на английском, подсказок (tooltips) нет. Свёрнутая капсула умеренно длинная — `380×66`, обложка трека `40×40`, внизу тонкая полоса прогресса. Раскрытая — `480×330`; обложка `52×52`, панель вейвформа `68 px`, между обложкой, панелью, кнопками и нижней секцией DROPSHELF оставлены зазоры, чтобы ничего не касалось. Кнопки в шапке увеличены до `28×28`, обводка при наведении не обрезается. Плавно раскрывается при наведении (60 мс), клик переключает раскрытие, сворачивается с мягкой анимацией (180 мс) без заметной задержки. Окно имеет фиксированный максимальный размер, меняется только капсула внутри — без вызовов ресайза HWND каждый кадр. Всегда по центру верхней части экрана.
-- **Системный плеер (SMTC).** Через `Windows.Media.Control` берёт обложку, название, исполнителя, альбом и источник (Spotify / Yandex Music / Chrome / Edge / Firefox / VLC …). Кнопки «предыдущий / пауза/play / следующий» сначала пробуют SMTC, а при неудаче отправляют аппаратные медиаклавиши. Подписка на смену сессии, трека и состояния воспроизведения. Прогресс трека виден в двух местах: тонкая полоса внизу свёрнутой капсулы и полоса в раскрытой панели вейвформа с текущим и общим временем.
-- **Живой вейвформ и эквалайзер.** `WasapiLoopbackCapture` слушает системный вывод. Кольцевой буфер рисуется одним тонким `WaveformControl` без лишних линий и свечений. Состояние обновляется в событии `CompositionTarget.Rendering`, то есть в такт частоте отображения, а не фиксированным тиком 24 мс; сглаживание и затухание считаются по реальному времени кадра. FFT на 1024 отсчёта даёт 7 полос 30 Гц – 16 кГц с авто-усилением. Устройства перебираются автоматически, в тишине остаётся лёгкое «дыхание».
-- **Цвет активного окна (ембиент).** По включаемой функции (кнопка-палитра в шапке, пункт в меню или трее) приложение каждые 350 мс снимает активное окно (или рабочий стол, если активна сама капсула) и сканирует его целиком, без уменьшения до миниатюры; сама капсула исключается, серые и почти белые пиксели отбрасываются, а тёмные насыщенные цвета (включая тёмно-красный) учитываются. Цвет не выбирается по яркости: внутри доминирующего оттенка смешиваются все относящиеся к нему пиксели по площади, затем смесь приводится к насыщенности не ниже `55%` и средней светлоте `50%` — это даёт чистый акцент без пастели и без фиолетового от тёмно-красного. Мелкие иконки и случайные акценты площадью меньше 1,5% окна игнорируются. При смене окна цвет применяется сразу, переход длится 320 мс; случайные вспышки отсекаются тремя совпадающими замерами по оттенку и насыщенности, а не по яркости. Красное приложение даёт красный, зелёное — зелёный и т.д.; если насыщенного цвета нет, берётся средний цвет рабочего стола. Цвет берётся целиком из активного окна или рабочего стола, без подмеса синего и без обложки трека; при выключении ембиента акцент возвращается к синему `#5B8CFF`, а не к серому. Своё окно не учитывается.
-- **Статус в раскрытом виде.** В верхнем ряду — текущее время, заряд мыши и наушников, таймер `LISTENED hh:mm:ss` (тикает только во время воспроизведения) и акцентные полоски сети. Заряд берётся только у реально подключённых PnP-устройств, публикующих `DEVPKEY_Device_BatteryLevel`: отключённые и проблемные узлы отсекаются по флагам `CM_Get_DevNode_Status`, телефоноподобные устройства (`Redmi`, `iPhone`, `Samsung`, `Pixel`, `Huawei`, `Xiaomi`) не подменяют наушники. Если устройство не отдаёт уровень батареи, показывается `—` — так, например, сейчас обстоит с `Mchose A7 Ultra` и `G435 Wireless Gaming Headset`. Классы и имена определяются автоматически; для неподдерживаемых устройств можно добавить подстроки имени в `HKCU\Software\Pill\BatteryNames` (`Mouse` и/или `Headphones`, через `;`). Полосы сети считаются по активному маршруту (`GetBestInterface(8.8.8.8)` + `GetAdaptersInfo`), а не по первому попавшемуся адаптеру: проводной сеть даёт 4 полосы, Wi‑Fi — по скорости ссылки. Никаких файлов статистики и непонятных счётчиков. Таймлайн трека обновляется каждые 250 мс и не залипает на `0:00`. Если SMTC не видит плеера, вместо трека и плеера показывается «No music playing».
-- **Dropshelf.** Перетаскиваете файл из Проводника на верхний край — капсула раскрывается, подсвечивается акцентом и кладёт файл на полку. Мышью тянете чип с полки в нужное окно — наружу уходит настоящий `FileDrop` с путём, после успешной вставки элемент исчезает с полки. Escape при перетаскивании оставляет файл на месте. В раскрытом виде нижняя секция подписана «DROPSHELF», рядом с ней — кнопка очистки полки.
-- **Трей.** Клик по иконке открывает отдельное WPF-меню в стиле `Aerisflow`: размягчённое стекло, карточки и переключатели, тонкий скроллбар. Разделы: `AMBIENT` (цвет активного окна и сброс акцента), `SYSTEM` (автозапуск и автообновление), `UPDATES` (бета-канал, проверка, заметки релиза, прогресс, `Update & restart` / `Install on shutdown`). Внизу — `Show / hide`, `Clear shelf`, `Quit`. Меню закрывается по клику вне его, по `Esc`, повторному клику по иконке или через кнопки.
-- **Настройки.** `Ambient color`, `Autostart`, `Auto update`, `UpdateChannel`, `AutoExpand`, `AutoHideMs`, `EqualizerGain` и `WaveformGain` сохраняются в `%LOCALAPPDATA%\Pill\settings.json` и не сбрасываются при обновлении.
-- **Установщик.** Отдельная программа `Pill.Installer.exe` без Inno Setup. Она копирует приложение в `%LOCALAPPDATA%\Pill\app`, пишет `current.json`, создаёт ярлык в меню «Пуск», пункт в «Установка и удаление программ» и запись в `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. Команды `Pill.Installer.exe --install` / `--uninstall` работают без окна; `Pill.exe --install` просто запускает этот же установщик. Удаление убирает ярлык, реестр и версионные папки, но сохраняет `settings.json`.
-- **OTA-обновление.** Новая система по образцу `Aerisflow`: GitHub Releases → `manifest.json` + `manifest.sig` → проверка RSA-подписи → SHA256 каждого файла → скачивание только изменившихся файлов в `app-<version>` → переключение `current.json` на выходе и перезапуск. Каналы `beta` и `stable`, rollout-процент, заметки релиза из GitHub, отложенная установка при выходе. Проверка раз в 2 часа и при старте, плюс вручную через `Check for updates`. Обновление доступно только в установленной сборке.
+| Compact | Expanded |
+| --- | --- |
+| ![Compact capsule](docs/screenshots/pill-compact.png) | ![Expanded capsule](docs/screenshots/pill-expanded.png) |
 
-## Сборка и запуск
+| Tray menu | Installer |
+| --- | --- |
+| ![Tray menu](docs/screenshots/tray-menu.png) | ![Installer](docs/screenshots/installer.png) |
+
+## Features
+
+- Fixed-size topmost capsule, centered at the top: 380×66 collapsed, 480×330 expanded. Black gradient background, 16% accent layer, 320 ms transitions.
+- System media player through SMTC: cover art, title, artist, album, source, track progress, previous/play/pause/next. Buttons fall back to hardware media keys.
+- Live WASAPI loopback waveform and 7-band FFT equalizer from 30 Hz to 16 kHz.
+- Ambient color from the active window or desktop: area-weighted dominant hue, saturation at least 55%, accents below 1.5% ignored, no blue mixing, no album-art influence. The color is applied immediately and transitions in 320 ms. Fallback accent: `#5B8CFF`.
+- Status row: clock, listening timer, real battery levels from `DEVPKEY_Device_BatteryLevel`, phone-like devices excluded, unsupported devices shown as `—`, network strength from the default route.
+- Dropshelf: drag files onto the capsule, drag them back out as a real `FileDrop`, clear the shelf from the tray menu.
+- WPF tray menu with `AMBIENT`, `SYSTEM` and `UPDATES`. It closes on an outside click, `Esc`, or a second click on the tray icon.
+- Separate hand-written installer. No Inno Setup.
+- Signed OTA updates from GitHub Releases with deferred installation and automatic restart. Available only in installed builds.
+
+## Controls
+
+- Hover the capsule to expand it; move away to collapse it. Click to toggle.
+- Click the palette button or use `AMBIENT` in the tray menu to toggle ambient color.
+- Use the media buttons for the active SMTC session.
+- Drop files on the capsule, then drag the shelf chips into other apps.
+- Click the tray icon to open the menu.
+
+## Install
+
+```powershell
+Pill.Installer.exe
+Pill.exe --install
+```
+
+Silent mode:
+
+```powershell
+Pill.Installer.exe --install
+Pill.Installer.exe --uninstall
+```
+
+The installer copies the app to `%LOCALAPPDATA%\Pill\app`, creates a Start menu shortcut, a Run entry and an uninstall registry entry. Uninstall keeps `settings.json`.
+
+## Settings
+
+Settings are stored in `%LOCALAPPDATA%\Pill\settings.json`:
+
+```json
+{
+  "AmbientColorEnabled": false,
+  "AutoStart": true,
+  "AutoUpdate": true,
+  "UpdateChannel": "beta",
+  "AutoExpand": true,
+  "AutoHideMs": 180,
+  "EqualizerGain": 1.0,
+  "WaveformGain": 1.0
+}
+```
+
+`AmbientColorEnabled`, `AutoStart`, `AutoUpdate` and `UpdateChannel` are also available in the tray menu.
+
+## Updates
+
+Releases publish these assets separately: `manifest.json`, `manifest.sig` and every file listed in the manifest. Asset names must match the `asset` fields.
+
+The updater verifies the RSA/SHA256 manifest signature and the SHA256 hash of each file, downloads changed files into `app-<version>`, then switches `current.json`. It checks on startup and every 2 hours, and can be triggered manually from `UPDATES`.
+
+Channels: `beta` and `stable`. The manifest also controls rollout percentage and release notes. Updates can be installed immediately with restart or deferred until exit.
+
+## Build
 
 ```powershell
 dotnet build .\Pill\Pill.csproj
+dotnet build .\Pill.Installer\Pill.Installer.csproj
 .\Pill\bin\Debug\net10.0-windows10.0.17763.0\Pill.exe
 ```
 
-Готовый архив для релиза:
+Release payload and signed manifest:
 
 ```powershell
-.\publish.ps1 -Version 1.0.1
+.\publish.ps1 -Version 1.0.0 -Channel beta -RolloutPercent 100 -PfxPath .\updates\pill-update.pfx -PfxPassword "<password>"
 ```
 
-Получится `Release\payload` и `Release\Pill-1.0.1-beta.zip`. В `payload` лежат `manifest.json`, все файлы приложения и, если подписать, `manifest.sig`.
-
-Подпись манифеста обязательна. Если ключ ещё нет:
-
-```powershell
-.\new-update-key.ps1 -PfxPassword "ваш-пароль"
-```
-
-Скрипт создаст PFX и напечатает SPKI — замените им `UpdateConfig.PublicKeySpki` в `Pill\Services\UpdateService.cs` и пересоберите приложение. Затем:
-
-```powershell
-.\publish.ps1 -Version 1.0.1 -PfxPath .\updates\pill-update.pfx -PfxPassword "ваш-пароль"
-```
-
-В GitHub нужно загрузить **отдельными ассетами** `manifest.json`, `manifest.sig` и все файлы из `Release\payload` (имена ассетов должны совпадать с полями `asset` в манифесте). Архив можно приложить дополнительно. Релиз отметить как `pre-release`.
-
-Или просто откройте `Pill/Pill.csproj` в Visual Studio 2022/2026 и нажмите F5.
-
-Требуется .NET 10 SDK и Windows Desktop Runtime. NAudio ставится из NuGet (`NAudio 2.2.1`); WinRT-проекции для SMTC входят в targeted platform `10.0.17763.0`.
-
-## Структура
-
-```
-Pill/
-  App.xaml(.cs)              — запуск приложения
-  MainWindow.xaml(.cs)       — островок, анимации, DnD, трей
-  Resources/Theme.xaml       — тема, кнопки, иконки, конвертеры
-  Controls/WaveformControl.cs — oscilloscope по WASAPI-буферу
-  Models/                    — ObservableObject, элемент полки
-  Services/
-    SystemMediaService.cs    — SMTC + медиаклавиши + таймлайн трека
-    AudioEqualizer.cs        — WASAPI loopback + FFT + waveform-буфер
-    ActiveWindowColorService.cs — цвет экрана через GDI + Win32
-    AmbientColorService.cs   — акцент из обложки (fallback)
-    StatusService.cs         — часы, заряд периферии (PnP/cfgmgr32), сеть, таймер прослушивания
-    IconHelper.cs            — иконки файлов через SHGetFileInfo
-    SettingsService.cs       — сохранение настроек в LOCALAPPDATA
-    InstallerService.cs      — запуск отдельного установщика, автозапуск
-    UpdateService.cs         — манифест, подпись, staging и переключение версий
-  UI/TrayMenuWindow.xaml(.cs) — WPF-меню в стиле Aerisflow
-  Native/WindowEffects.cs    — тёмный режим, скругления, acrylic/blur
-  ViewModels/MainViewModel.cs — состояние плеера/эквалайзера/полки/статуса
-Pill.Installer/
-  Installer.cs               — самописный установщик и uninstaller
-  MainWindow.xaml(.cs)       — окно установщика
-publish.ps1                  — сборка payload, манифеста и zip
-sign-update.ps1              — подпись manifest.json
-new-update-key.ps1           — генерация ключа и SPKI
-RELEASE_NOTES.md             — заметки для manifest.json
-```
-
-## Важные нюансы
-
-- SMTC видит только те плееры, которые сами публикуют состояние через Windows Media Controls. Это есть у Spotify, Edge/Chrome, Яндекс Музыки (в браузере и приложении), VLC, foobar2000 и др. Если плеер «молчит», кнопки всё равно работают через системные медиаклавиши.
-- WASAPI loopback захватывает то, что сейчас идёт **в динамики**. Если звук идёт только в наушники/виртуальное устройство, эквалайзер слушает активное устройство вывода по умолчанию.
-- Островок всегда сверху; в некоторых полноэкранных играх приложения могут перекрыть его — это ограничение обычного topmost-окна.
-- OTA работает только после установки: в portable-режиме нет `current.json`, поэтому меню показывает `Only in installed builds`.
-- Если подпись манифеста не совпадает с `PublicKeySpki`, обновление молча игнорируется — это защита от подмены архива.
+The PFX file is private. Do not publish it. Release notes are read from [RELEASE_NOTES.md](RELEASE_NOTES.md).
