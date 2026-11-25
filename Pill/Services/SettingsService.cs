@@ -10,6 +10,10 @@ public sealed class AppSettings
     public bool AutoStart { get; set; } = true;
     public bool AutoUpdate { get; set; } = true;
     public string UpdateChannel { get; set; } = "beta";
+    public bool AutoExpand { get; set; } = true;
+    public int AutoHideMs { get; set; } = 180;
+    public double EqualizerGain { get; set; } = 1.0;
+    public double WaveformGain { get; set; } = 1.0;
 }
 
 public static class SettingsService

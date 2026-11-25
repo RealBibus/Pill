@@ -7,7 +7,6 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Media;
-using System.Windows.Threading;
 using Pill.Models;
 using Pill.Services;
 
@@ -22,11 +21,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private readonly ActiveWindowColorService _activeWindowColors = new();
     private readonly AppSettings _settings = SettingsService.Load();
-    private readonly DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromHours(6) };
 
     private bool _ambientEnabled;
     private bool _autoStart;
     private bool _autoUpdate;
+    private bool _autoExpand;
+    private int _autoHideMs;
+    private double _equalizerGain;
+    private double _waveformGain;
+    private string _updateChannel = "beta";
     private Color _ambientColor = AmbientColorService.BaseAccent;
 
     public bool HasShelfItems => Shelf.Count > 0;
@@ -41,9 +44,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (!Set(ref _ambientEnabled, value)) return;
             _settings.AmbientColorEnabled = value;
             SettingsService.Save(_settings);
-
-            if (value)
-                StartAmbient();
+            if (value) StartAmbient();
             else
             {
                 StopAmbient();
@@ -72,15 +73,65 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (!Set(ref _autoUpdate, value)) return;
             _settings.AutoUpdate = value;
             SettingsService.Save(_settings);
-            if (value)
-            {
-                _updateTimer.Start();
-                _ = ApplyBestUpdateAsync();
-            }
-            else
-            {
-                _updateTimer.Stop();
-            }
+            UpdateManager.AutoEnabled = value;
+        }
+    }
+
+    public bool AutoExpand
+    {
+        get => _autoExpand;
+        set
+        {
+            if (!Set(ref _autoExpand, value)) return;
+            _settings.AutoExpand = value;
+            SettingsService.Save(_settings);
+        }
+    }
+
+    public int AutoHideMs
+    {
+        get => _autoHideMs;
+        set
+        {
+            if (!Set(ref _autoHideMs, value)) return;
+            _settings.AutoHideMs = value;
+            SettingsService.Save(_settings);
+        }
+    }
+
+    public double EqualizerGain
+    {
+        get => _equalizerGain;
+        set
+        {
+            if (!Set(ref _equalizerGain, value)) return;
+            Equalizer.Sensitivity = value;
+            _settings.EqualizerGain = value;
+            SettingsService.Save(_settings);
+        }
+    }
+
+    public double WaveformGain
+    {
+        get => _waveformGain;
+        set
+        {
+            if (!Set(ref _waveformGain, value)) return;
+            Equalizer.WaveformGain = value;
+            _settings.WaveformGain = value;
+            SettingsService.Save(_settings);
+        }
+    }
+
+    public string UpdateChannel
+    {
+        get => _updateChannel;
+        set
+        {
+            if (!Set(ref _updateChannel, value)) return;
+            _settings.UpdateChannel = value;
+            SettingsService.Save(_settings);
+            UpdateManager.Service.Channel = value;
         }
     }
 
@@ -94,11 +145,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         Shelf.CollectionChanged += OnShelfChanged;
         Media.PropertyChanged += OnMediaPropertyChanged;
-        _updateTimer.Tick += (_, _) => _ = ApplyBestUpdateAsync();
 
         _ambientEnabled = _settings.AmbientColorEnabled;
         _autoStart = _settings.AutoStart;
         _autoUpdate = _settings.AutoUpdate;
+        _autoExpand = _settings.AutoExpand;
+        _autoHideMs = _settings.AutoHideMs;
+        _equalizerGain = Math.Clamp(_settings.EqualizerGain, 0.4, 2.5);
+        _waveformGain = Math.Clamp(_settings.WaveformGain, 0.4, 2.5);
+        _updateChannel = string.IsNullOrWhiteSpace(_settings.UpdateChannel) ? "beta" : _settings.UpdateChannel;
+
+        Equalizer.Sensitivity = _equalizerGain;
+        Equalizer.WaveformGain = _waveformGain;
+        UpdateManager.Service.Channel = _updateChannel;
+        UpdateManager.AutoEnabled = _autoUpdate;
         if (_ambientEnabled) StartAmbient();
     }
 
@@ -138,70 +198,22 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Status.Start();
         Status.UpdateMedia(Media.IsPlaying, Media.Title);
         _ = Media.StartAsync();
-        if (_autoUpdate)
-        {
-            _updateTimer.Start();
-            _ = ApplyBestUpdateAsync();
-        }
     }
 
-    public void Install()
-    {
-        if (InstallerService.IsInstalled)
-        {
-            System.Windows.MessageBox.Show("Pill is already installed.", "Pill");
-            return;
-        }
+    public void Install() => InstallerService.LaunchInstaller(false);
 
-        InstallerService.Install();
-        System.Windows.Application.Current?.Shutdown();
+    public void Uninstall() => InstallerService.LaunchInstaller(true);
+
+    public async Task<bool> CheckForUpdatesAsync()
+    {
+        await UpdateManager.CheckNowAsync();
+        return UpdateManager.Pending != null;
     }
 
-    public void Uninstall()
+    public void ClearShelf()
     {
-        System.Windows.MessageBoxResult result = System.Windows.MessageBox.Show(
-            "Uninstall Pill?", "Pill",
-            System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Question);
-        if (result != System.Windows.MessageBoxResult.Yes) return;
-
-        InstallerService.Uninstall();
-        System.Windows.Application.Current?.Shutdown();
-    }
-
-    public async Task CheckForUpdatesAsync()
-    {
-        UpdateInfo? update = await UpdateService.CheckAsync();
-        if (update is null)
-        {
-            System.Windows.MessageBox.Show("No beta update available.", "Pill");
-            return;
-        }
-
-        System.Windows.MessageBoxResult result = System.Windows.MessageBox.Show(
-            "Beta update " + update.Version + " is ready. Install and restart now?",
-            "Pill", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Question);
-        if (result == System.Windows.MessageBoxResult.Yes)
-            await ApplyUpdateAsync(update);
-    }
-
-    private async Task ApplyBestUpdateAsync()
-    {
-        UpdateInfo? update = await UpdateService.CheckAsync();
-        if (update is not null) await ApplyUpdateAsync(update);
-    }
-
-    private async Task ApplyUpdateAsync(UpdateInfo update)
-    {
-        try
-        {
-            await UpdateService.DownloadAndApplyAsync(update);
-        }
-        catch
-        {
-            return;
-        }
-
-        System.Windows.Application.Current?.Shutdown();
+        var items = new List<ShelfItem>(Shelf);
+        foreach (ShelfItem item in items) Shelf.Remove(item);
     }
 
     public string[] AddFiles(IEnumerable<string> paths)
@@ -215,8 +227,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             catch { continue; }
 
             if (!File.Exists(path) && !Directory.Exists(path)) continue;
-            if (Shelf.Any(item => string.Equals(item.Path, path, StringComparison.OrdinalIgnoreCase)))
-                continue;
+            if (Shelf.Any(item => string.Equals(item.Path, path, StringComparison.OrdinalIgnoreCase))) continue;
 
             Shelf.Add(new ShelfItem(path));
             added.Add(path);
@@ -233,7 +244,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         Shelf.CollectionChanged -= OnShelfChanged;
         Media.PropertyChanged -= OnMediaPropertyChanged;
-        _updateTimer.Stop();
         StopAmbient();
         _activeWindowColors.Dispose();
         Status.Dispose();

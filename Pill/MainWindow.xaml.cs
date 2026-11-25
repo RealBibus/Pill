@@ -12,11 +12,9 @@ using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using Pill.Models;
 using Pill.Services;
+using Pill.UI;
 using Pill.ViewModels;
-using WinFormsContextMenuStrip = System.Windows.Forms.ContextMenuStrip;
 using WinFormsNotifyIcon = System.Windows.Forms.NotifyIcon;
-using WinFormsToolStripMenuItem = System.Windows.Forms.ToolStripMenuItem;
-using WinFormsToolStripSeparator = System.Windows.Forms.ToolStripSeparator;
 using Color = System.Drawing.Color;
 using DrawingLinearGradientBrush = System.Drawing.Drawing2D.LinearGradientBrush;
 using DrawingPen = System.Drawing.Pen;
@@ -56,10 +54,7 @@ public partial class MainWindow : Window
     public SolidColorBrush AccentDeepBrush => _accentDeepBrush;
 
     private WinFormsNotifyIcon? _tray;
-    private WinFormsContextMenuStrip? _trayMenu;
-    private WinFormsToolStripMenuItem? _ambientMenuItem;
-    private WinFormsToolStripMenuItem? _autoStartMenuItem;
-    private WinFormsToolStripMenuItem? _autoUpdateMenuItem;
+    private TrayMenuWindow? _trayMenuWindow;
     private TrayIcon? _trayIcon;
 
     private bool _expanded;
@@ -84,17 +79,9 @@ public partial class MainWindow : Window
                 AnimateAccent(_accentBrush, main);
                 AnimateAccent(_accentSoftBrush, AmbientColorService.Lift(main));
                 AnimateAccent(_accentDeepBrush, AmbientColorService.Deepen(main));
-                if (_ambientMenuItem is not null) _ambientMenuItem.Checked = _viewModel.AmbientColorEnabled;
-            }
-            else if (e.PropertyName == nameof(MainViewModel.AutoStart) && _autoStartMenuItem is not null)
-            {
-                _autoStartMenuItem.Checked = _viewModel.AutoStart;
-            }
-            else if (e.PropertyName == nameof(MainViewModel.AutoUpdate) && _autoUpdateMenuItem is not null)
-            {
-                _autoUpdateMenuItem.Checked = _viewModel.AutoUpdate;
             }
         };
+        UpdateManager.FadeOutRequested += OnFadeOutRequested;
 
         _hoverTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(60) };
         _hoverTimer.Tick += (_, _) => { _hoverTimer.Stop(); Expand(); };
@@ -276,7 +263,9 @@ public partial class MainWindow : Window
         }
         else if (!_collapseTimer.IsEnabled)
         {
-            ScheduleCollapse(_viewModel.HasShelfItems ? 1800 : 180);
+            int delay = _viewModel.HasShelfItems ? 1800 : _viewModel.AutoHideMs;
+            if (delay > 0) ScheduleCollapse(delay);
+            else _collapseTimer.Stop();
         }
     }
 
@@ -286,7 +275,7 @@ public partial class MainWindow : Window
         _dragLeaveTimer.Stop();
         _collapseTimer.Stop();
         _suppressAutoExpand = false;
-        if (!_expanded) _hoverTimer.Start();
+        if (_viewModel.AutoExpand && !_expanded) _hoverTimer.Start();
     }
 
     private void Root_MouseLeave(object sender, MouseEventArgs e)
@@ -296,7 +285,8 @@ public partial class MainWindow : Window
 
         if (PillBounds().Contains(e.GetPosition(this))) return;
 
-        ScheduleCollapse(_viewModel.HasShelfItems ? 1800 : 180);
+        int delay = _viewModel.HasShelfItems ? 1800 : _viewModel.AutoHideMs;
+        if (delay > 0) ScheduleCollapse(delay);
     }
 
     private void Root_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -450,57 +440,42 @@ public partial class MainWindow : Window
         try
         {
             _trayIcon = CreateTrayIcon();
-            _trayMenu = new WinFormsContextMenuStrip
-            {
-                BackColor = Color.FromArgb(10, 14, 24),
-                ForeColor = Color.FromArgb(244, 246, 255),
-                ShowImageMargin = false
-            };
-            _trayMenu.Items.Add(new WinFormsToolStripMenuItem("Show / hide", null, (_, _) => ToggleVisibility()));
-
-            _ambientMenuItem = new WinFormsToolStripMenuItem("Ambient color")
-            {
-                CheckOnClick = true,
-                Checked = _viewModel.AmbientColorEnabled
-            };
-            _ambientMenuItem.Click += (_, _) => _viewModel.AmbientColorEnabled = _ambientMenuItem.Checked;
-            _trayMenu.Items.Add(_ambientMenuItem);
-
-            _autoStartMenuItem = new WinFormsToolStripMenuItem("Autostart")
-            {
-                CheckOnClick = true,
-                Checked = _viewModel.AutoStart
-            };
-            _autoStartMenuItem.Click += (_, _) => _viewModel.AutoStart = _autoStartMenuItem.Checked;
-            _trayMenu.Items.Add(_autoStartMenuItem);
-
-            _autoUpdateMenuItem = new WinFormsToolStripMenuItem("Auto update (beta)")
-            {
-                CheckOnClick = true,
-                Checked = _viewModel.AutoUpdate
-            };
-            _autoUpdateMenuItem.Click += (_, _) => _viewModel.AutoUpdate = _autoUpdateMenuItem.Checked;
-            _trayMenu.Items.Add(_autoUpdateMenuItem);
-
-            _trayMenu.Items.Add(new WinFormsToolStripMenuItem("Check for updates", null,
-                (_, _) => _ = _viewModel.CheckForUpdatesAsync()));
-            _trayMenu.Items.Add(new WinFormsToolStripSeparator());
-            _trayMenu.Items.Add(new WinFormsToolStripMenuItem("Install", null, (_, _) => _viewModel.Install()));
-            _trayMenu.Items.Add(new WinFormsToolStripMenuItem("Uninstall", null, (_, _) => _viewModel.Uninstall()));
-            _trayMenu.Items.Add(new WinFormsToolStripSeparator());
-            _trayMenu.Items.Add(new WinFormsToolStripMenuItem("Exit", null, (_, _) => Exit()));
-
             _tray = new WinFormsNotifyIcon
             {
                 Icon = _trayIcon,
                 Text = "Pill — Dynamic Island",
-                ContextMenuStrip = _trayMenu,
                 Visible = true
+            };
+            _tray.MouseUp += (_, e) =>
+            {
+                if (e.Button is System.Windows.Forms.MouseButtons.Left or System.Windows.Forms.MouseButtons.Right)
+                    ShowTrayMenu();
             };
             _tray.DoubleClick += (_, _) => ToggleVisibility();
         }
         catch { }
     }
+
+    private void ShowTrayMenu()
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.Invoke(ShowTrayMenu);
+            return;
+        }
+
+        if (_trayMenuWindow is { IsVisible: true })
+        {
+            _trayMenuWindow.Close();
+            return;
+        }
+
+        _trayMenuWindow = new TrayMenuWindow(_viewModel, ToggleVisibility, Exit);
+        _trayMenuWindow.Closed += (_, _) => _trayMenuWindow = null;
+        _trayMenuWindow.Show();
+    }
+
+    private void OnFadeOutRequested() => AnimateOpacity(Pill, 0, 400);
 
     private void ToggleVisibility()
     {
@@ -553,6 +528,10 @@ public partial class MainWindow : Window
         _collapseTimer.Stop();
         _dragLeaveTimer.Stop();
         _stateStoryboard?.Stop(this);
+        UpdateManager.FadeOutRequested -= OnFadeOutRequested;
+
+        if (_trayMenuWindow is { IsVisible: true }) _trayMenuWindow.Close();
+        _trayMenuWindow = null;
 
         if (_tray is not null)
         {
@@ -560,8 +539,6 @@ public partial class MainWindow : Window
             _tray.Dispose();
             _tray = null;
         }
-        _trayMenu?.Dispose();
-        _trayMenu = null;
         _trayIcon?.Dispose();
         _trayIcon = null;
 

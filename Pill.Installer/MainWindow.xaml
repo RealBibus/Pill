@@ -1,0 +1,57 @@
+<Window x:Class="Pill.Installer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Pill Installer"
+        Width="420"
+        Height="252"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True">
+    <Border CornerRadius="14" Background="#38141418" BorderBrush="#2AFFFFFF" BorderThickness="1"
+            Padding="20,18,20,18">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <TextBlock Text="PILL INSTALLER" Foreground="{StaticResource InstallerAccent}"
+                       FontSize="11" FontWeight="SemiBold" Margin="0,0,0,6"/>
+            <TextBlock Grid.Row="1" Text="Install Pill on this PC" Foreground="{StaticResource InstallerText}"
+                       FontSize="20" FontWeight="SemiBold" Margin="0,0,0,14"/>
+
+            <Border Grid.Row="2" Background="{StaticResource InstallerCard}" CornerRadius="8" Padding="10,8" Margin="0,0,0,12">
+                <StackPanel>
+                    <TextBlock Text="DESTINATION" Foreground="{StaticResource InstallerMuted}"
+                               FontSize="9.5" FontWeight="SemiBold" Margin="0,0,0,3"/>
+                    <TextBlock x:Name="PathText" Foreground="{StaticResource InstallerText}" FontSize="12"/>
+                    <TextBlock x:Name="VersionText" Foreground="{StaticResource InstallerMuted}" FontSize="11" Margin="0,3,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <ProgressBar Grid.Row="3" x:Name="Progress" Height="4" Minimum="0" Maximum="1" Value="0"
+                         Background="#33FFFFFF" BorderThickness="0"
+                         Foreground="{StaticResource InstallerAccent}" Margin="0,0,0,12"/>
+
+            <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,0,0,10">
+                <Button x:Name="InstallButton" Style="{StaticResource InstallerButton}" Content="Install"
+                        Width="110" Margin="0,0,8,0" Click="InstallButton_Click"/>
+                <Button x:Name="UninstallButton" Style="{StaticResource InstallerButton}" Content="Uninstall"
+                        Width="110" Margin="0,0,8,0" Click="UninstallButton_Click"/>
+                <Button x:Name="CloseButton" Style="{StaticResource InstallerButton}" Content="Close"
+                        Width="80" Click="CloseButton_Click"/>
+            </StackPanel>
+
+            <TextBlock Grid.Row="5" x:Name="StatusText" Text="Ready" Foreground="{StaticResource InstallerMuted}"
+                       FontSize="11.5" VerticalAlignment="Bottom"/>
+        </Grid>
+    </Border>
+</Window>

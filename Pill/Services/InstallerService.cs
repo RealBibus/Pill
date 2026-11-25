@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Windows;
 using Microsoft.Win32;
 
 namespace Pill.Services;
@@ -13,56 +14,118 @@ public static class InstallerService
     private const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\Pill";
     private const string AppName = "Pill";
 
-    public static string InstallDirectory => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Pill", "app");
+    public static string RootDirectory => UpdateConfig.RootDir;
 
-    public static string InstalledExecutable => Path.Combine(InstallDirectory, "Pill.exe");
+    public static string InstalledExecutable
+    {
+        get
+        {
+            CurrentState? state = UpdateManager.Service.ReadCurrent();
+            string dir = string.IsNullOrWhiteSpace(state?.Dir) ? "app" : state!.Dir;
+            return Path.Combine(RootDirectory, dir, UpdateConfig.AppExeName);
+        }
+    }
 
-    public static bool IsInstalled => File.Exists(InstalledExecutable);
+    public static bool IsInstalled => File.Exists(Path.Combine(RootDirectory, "current.json"));
 
     public static string CurrentExecutable => Environment.ProcessPath ?? InstalledExecutable;
 
     public static void Install()
     {
+        string installer = FindInstaller();
+        if (File.Exists(installer))
+        {
+            Launch(installer, "--install");
+            return;
+        }
+
+        InstallFallback();
+    }
+
+    public static void Uninstall()
+    {
+        string installer = File.Exists(Path.Combine(InstalledExecutable.Replace(UpdateConfig.AppExeName, ""), "Pill.Installer.exe"))
+            ? Path.Combine(InstalledExecutable.Replace(UpdateConfig.AppExeName, ""), "Pill.Installer.exe")
+            : FindInstaller();
+        if (File.Exists(installer))
+        {
+            Launch(installer, "--uninstall");
+            return;
+        }
+
+        UninstallFallback();
+    }
+
+    public static void LaunchInstaller(bool uninstall)
+    {
+        string installer = FindInstaller();
+        if (!File.Exists(installer)) return;
+        Launch(installer, uninstall ? "--uninstall" : "--install");
+    }
+
+    private static string FindInstaller()
+    {
+        string local = Path.Combine(AppContext.BaseDirectory, "Pill.Installer.exe");
+        if (File.Exists(local)) return local;
+
+        CurrentState? state = UpdateManager.Service.ReadCurrent();
+        string dir = string.IsNullOrWhiteSpace(state?.Dir) ? "app" : state!.Dir;
+        return Path.Combine(RootDirectory, dir, "Pill.Installer.exe");
+    }
+
+    private static void Launch(string installer, string arguments)
+    {
+        Process.Start(new ProcessStartInfo(installer)
+        {
+            Arguments = arguments,
+            UseShellExecute = true,
+            WorkingDirectory = Path.GetDirectoryName(installer) ?? AppContext.BaseDirectory
+        });
+        Application.Current?.Shutdown();
+    }
+
+    private static void InstallFallback()
+    {
         string source = Path.GetDirectoryName(CurrentExecutable) ?? string.Empty;
         if (string.IsNullOrWhiteSpace(source)) return;
 
-        Directory.CreateDirectory(InstallDirectory);
+        string appDir = Path.Combine(RootDirectory, "app");
+        Directory.CreateDirectory(appDir);
         string[] patterns = { "*.exe", "*.dll", "*.json", "*.config", "*.pri" };
         foreach (string pattern in patterns)
         {
             foreach (string file in Directory.GetFiles(source, pattern, SearchOption.TopDirectoryOnly))
             {
                 string name = Path.GetFileName(file);
-                if (string.Equals(name, Path.GetFileName(SettingsService.FilePath), StringComparison.OrdinalIgnoreCase))
-                    continue;
-                File.Copy(file, Path.Combine(InstallDirectory, name), true);
+                if (name.Equals("settings.json", StringComparison.OrdinalIgnoreCase)) continue;
+                if (name.Equals("manifest.json", StringComparison.OrdinalIgnoreCase)) continue;
+                if (name.Equals("current.json", StringComparison.OrdinalIgnoreCase)) continue;
+                if (name.Equals("device.json", StringComparison.OrdinalIgnoreCase)) continue;
+                File.Copy(file, Path.Combine(appDir, name), true);
             }
         }
 
-        CreateShortcut();
-        WriteUninstallEntry();
-
-        AppSettings settings = SettingsService.Load();
-        SetAutoStart(settings.AutoStart);
-        if (settings.AutoStart && IsInstalled)
-            Process.Start(new ProcessStartInfo(InstalledExecutable) { UseShellExecute = true, WorkingDirectory = InstallDirectory });
+        UpdateManager.Service.WriteCurrent(new CurrentState
+        {
+            Version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0.0",
+            Dir = "app"
+        });
+        UpdateManager.ApplyAutoStart(true);
     }
 
-    public static void Uninstall()
+    private static void UninstallFallback()
     {
-        SetAutoStart(false);
+        UpdateManager.ApplyAutoStart(false);
         RemoveShortcut();
         RemoveUninstallEntry();
-
-        string directory = InstallDirectory;
-        if (!Directory.Exists(directory)) return;
 
         string batch = Path.Combine(Path.GetTempPath(), "pill-uninstall-" + Guid.NewGuid().ToString("N") + ".cmd");
         File.WriteAllText(batch,
             "@echo off\r\n" +
             "ping -n 4 127.0.0.1 >nul\r\n" +
-            "rmdir /s /q \"" + directory + "\"\r\n" +
+            "rmdir /s /q \"" + RootDirectory + "\\app\" >nul 2>&1\r\n" +
+            "del \"" + Path.Combine(RootDirectory, "current.json") + "\" >nul 2>&1\r\n" +
+            "del \"" + Path.Combine(RootDirectory, "device.json") + "\" >nul 2>&1\r\n" +
             "del \"%~f0\"\r\n");
         Process.Start(new ProcessStartInfo("cmd.exe", "/c start \"\" /min \"" + batch + "\"")
         {
@@ -71,20 +134,7 @@ public static class InstallerService
         });
     }
 
-    public static void SetAutoStart(bool enabled)
-    {
-        string executable = IsInstalled ? InstalledExecutable : CurrentExecutable;
-        try
-        {
-            using RegistryKey? key = Registry.CurrentUser.OpenSubKey(RunKey, true);
-            if (key is null) return;
-            if (enabled)
-                key.SetValue(AppName, "\"" + executable + "\"");
-            else
-                key.DeleteValue(AppName, false);
-        }
-        catch { }
-    }
+    public static void SetAutoStart(bool enabled) => UpdateManager.ApplyAutoStart(enabled);
 
     public static bool GetAutoStart()
     {
@@ -93,74 +143,24 @@ public static class InstallerService
             using RegistryKey? key = Registry.CurrentUser.OpenSubKey(RunKey, false);
             return key?.GetValue(AppName) is string value && !string.IsNullOrWhiteSpace(value);
         }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private static void CreateShortcut()
-    {
-        try
-        {
-            string programs = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "Microsoft", "Windows", "Start Menu", "Programs");
-            Directory.CreateDirectory(programs);
-            string shortcutPath = Path.Combine(programs, AppName + ".lnk");
-
-            Type? shellType = Type.GetTypeFromProgID("WScript.Shell");
-            if (shellType is null) return;
-            object shell = Activator.CreateInstance(shellType)!;
-            object shortcut = shellType.InvokeMember(
-                "CreateShortcut", BindingFlags.InvokeMethod, null, shell, new object[] { shortcutPath })!;
-            Type shortcutType = shortcut.GetType();
-
-            shortcutType.InvokeMember("TargetPath", BindingFlags.SetProperty, null, shortcut,
-                new object[] { InstalledExecutable });
-            shortcutType.InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, shortcut,
-                new object[] { InstallDirectory });
-            shortcutType.InvokeMember("IconLocation", BindingFlags.SetProperty, null, shortcut,
-                new object[] { InstalledExecutable + ",0" });
-            shortcutType.InvokeMember("Save", BindingFlags.InvokeMethod, null, shortcut, Array.Empty<object>());
-        }
-        catch { }
+        catch { return false; }
     }
 
     private static void RemoveShortcut()
     {
         try
         {
-            string shortcutPath = Path.Combine(
+            string shortcut = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 "Microsoft", "Windows", "Start Menu", "Programs", AppName + ".lnk");
-            if (File.Exists(shortcutPath)) File.Delete(shortcutPath);
-        }
-        catch { }
-    }
-
-    private static void WriteUninstallEntry()
-    {
-        try
-        {
-            using RegistryKey key = Registry.CurrentUser.CreateSubKey(UninstallKey)!;
-            key.SetValue("DisplayName", AppName);
-            key.SetValue("DisplayVersion", Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0.0");
-            key.SetValue("Publisher", "RealBibus");
-            key.SetValue("InstallLocation", InstallDirectory);
-            key.SetValue("UninstallString", "\"" + InstalledExecutable + "\" --uninstall");
-            key.SetValue("NoModify", 1, RegistryValueKind.DWord);
-            key.SetValue("NoRepair", 1, RegistryValueKind.DWord);
+            if (File.Exists(shortcut)) File.Delete(shortcut);
         }
         catch { }
     }
 
     private static void RemoveUninstallEntry()
     {
-        try
-        {
-            Registry.CurrentUser.DeleteSubKeyTree(UninstallKey, false);
-        }
+        try { Registry.CurrentUser.DeleteSubKeyTree(UninstallKey, false); }
         catch { }
     }
 }

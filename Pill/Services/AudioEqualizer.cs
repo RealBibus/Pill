@@ -37,6 +37,8 @@ public sealed class AudioEqualizer : ObservableObject, IDisposable
     private TimeSpan _lastFrameTime = TimeSpan.FromMilliseconds(-1);
     private float _peak = 0.05f;
     private float _signalPeak;
+    public double Sensitivity { get; set; } = 1d;
+    public double WaveformGain { get; set; } = 1d;
     private WasapiLoopbackCapture? _capture;
     private MMDeviceEnumerator? _enumerator;
     private bool _disposed;
@@ -217,7 +219,7 @@ public sealed class AudioEqualizer : ObservableObject, IDisposable
                 }
 
                 _peak = Math.Max(_peak * 0.997f, (float)peakInBand);
-                float level = (float)Math.Clamp(peakInBand / Math.Max(_peak, 0.008d), 0d, 1d);
+                float level = (float)Math.Clamp(peakInBand / Math.Max(_peak, 0.008d) * Sensitivity, 0d, 1d);
                 _raw[band] = Math.Max(level, _raw[band] * 0.9f);
             }
         }
@@ -277,7 +279,8 @@ public sealed class AudioEqualizer : ObservableObject, IDisposable
         lock (_sync)
         {
             for (int i = 0; i < WaveformLength; i++)
-                destination[i] = _waveform[(_waveIndex + 1 + i) % WaveformLength];
+                destination[i] = (float)Math.Clamp(
+                    _waveform[(_waveIndex + 1 + i) % WaveformLength] * WaveformGain, -1f, 1f);
         }
     }
 

@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.Windows;
 using Pill.Services;
 
@@ -14,14 +13,6 @@ public partial class App : System.Windows.Application
         if (e.Args.Length > 0)
         {
             string mode = e.Args[0];
-            if (mode == "--apply-update" && e.Args.Length >= 4)
-            {
-                if (int.TryParse(e.Args[3], out int oldPid))
-                    UpdateService.ApplyUpdate(e.Args[1], e.Args[2], oldPid);
-                Shutdown();
-                return;
-            }
-
             if (mode == "--install")
             {
                 InstallerService.Install();
@@ -38,11 +29,13 @@ public partial class App : System.Windows.Application
 
             if (mode == "--check-update")
             {
-                _ = UpdateService.CheckAsync();
+                _ = UpdateManager.CheckNowAsync();
                 Shutdown();
                 return;
             }
         }
+
+        UpdateManager.Attach(this);
 
         var window = new MainWindow();
         MainWindow = window;
