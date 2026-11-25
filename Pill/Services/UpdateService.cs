@@ -24,7 +24,7 @@ public static class UpdateConfig
     public const string GitHubOwner = "RealBibus";
     public const string GitHubRepo = "Pill";
     public const string PublicKeySpki =
-    "MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEArJVKkF0ORm77x3LQiseMrzTEyuVQygh4N9f0O84uqm2YuYgSyHdoaifZqFKu9xHNZB2K83mz2YrCF/KOJZUdCwrkhakT1zuK+iSUBVIJGkHXkLbNj7ksJg0HSJ3o/6hd17rX6dK90cTGlPx0FRxKGbNuJ/wBDnN5ooWA8fxANv32rkrOLEc4/O7Y/13XK1py6SEuxN9CrRd47gSyFXQelKcgnBi58q/9HhsQCqRZdnYqrUhlEr4Dmm8pTBKgac6c7zioPp1wle7hFL5pIDcQBgCEo7IWaq/Q3YOSSP1k+zRneeTtp/RrQUpzTNt0XisrOIF2mqGEhdkWdbgQMoOL5BFlnItWZ0WyhxkAnn2uVh8tfreYRgS1TmmNyk/MsUnMMUqxN4DZ88V6XYofbnSwe6/P2u1YsbFMbeAWpny/T9uO+5tfCrjAjoZhF9H7a2yfzDMcbWeuWxilJsjLBvtRNmS+PDUpREBR4UFw+wlxdyBFCCJUa+2HIoXl50AMpoBlAgMBAAE=";
+    "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAriOsEAaJ5YgmZXByYNtpdvUj/PGAhUIWWI4faDfuV4edcoijkMSXXxNmg/COQzHulc5OoU0l8YfZ9cBxIH8EVfI9QoZhqnnqVP52wkpMyxMDDMwtKmDrLMhIpgNZy8QrSaw73Cf7BCULpJC5mwWvvmySCCiF1jJNOiRQf8p7IaHIQlW4Jplpf3cPDaTrAzRlbUFgKIDf5o1MUPTWsVuOq3/CgUsZuHKObKD9giz+58ZC5T/zYb9V9V2655AZNp0IDp4uqEJyD0dIbuXMGLkUl8RCKzE6bC8ce3S13WlCsWGIGg0RiDp1Q9Lz61KWZFTjW7tOF8BS+p9Tqdyj+plDeQIDAQAB";
     public const string AppExeName = "Pill.exe";
 
     public static string RootDir

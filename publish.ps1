@@ -54,7 +54,9 @@ $manifest = [ordered]@{
     files = @($files)
 }
 
-$manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+$manifestJson = $manifest | ConvertTo-Json -Depth 6
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($manifestPath, $manifestJson, $utf8NoBom)
 
 if (-not [string]::IsNullOrWhiteSpace($PfxPath)) {
     & (Join-Path $root 'sign-update.ps1') -ManifestPath $manifestPath -OutputPath $signaturePath -PfxPath $PfxPath -PfxPassword $PfxPassword
