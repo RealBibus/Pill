@@ -16,6 +16,7 @@ public sealed class SystemMediaService : ObservableObject, IDisposable
     private GlobalSystemMediaTransportControlsSession? _session;
     private int _version;
     private bool _disposed;
+    private bool _paused;
     private readonly DispatcherTimer _timelineTimer;
     private TimeSpan _position;
     private TimeSpan _duration;
@@ -53,9 +54,21 @@ public sealed class SystemMediaService : ObservableObject, IDisposable
 
     public SystemMediaService()
     {
-        _timelineTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        _timelineTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _timelineTimer.Tick += (_, _) => UpdateTimeline();
         _timelineTimer.Start();
+    }
+
+    public void SetPaused(bool paused)
+    {
+        if (_disposed || _paused == paused) return;
+        _paused = paused;
+        if (paused) _timelineTimer.Stop();
+        else
+        {
+            _timelineTimer.Start();
+            _ = RefreshAsync();
+        }
     }
 
     private static string FormatTime(TimeSpan value) => value.TotalHours >= 1
@@ -64,6 +77,7 @@ public sealed class SystemMediaService : ObservableObject, IDisposable
 
     private void UpdateTimeline()
     {
+        if (_paused) return;
         var session = _session;
         if (session is null || _disposed)
         {
@@ -81,10 +95,12 @@ public sealed class SystemMediaService : ObservableObject, IDisposable
         {
             var timeline = session.GetTimelineProperties();
             TimeSpan reported = timeline.Position;
-            _duration = timeline.EndTime - timeline.StartTime;
+            TimeSpan length = timeline.EndTime - timeline.StartTime;
+            TimeSpan previousDuration = _duration;
+            if (length > TimeSpan.Zero) _duration = length;
             DateTime now = DateTime.UtcNow;
 
-            if (!_positionPrimed || reported != _reportedPosition || !_isPlaying)
+            if (!_positionPrimed)
             {
                 _position = reported;
                 _reportedPosition = reported;
@@ -93,9 +109,24 @@ public sealed class SystemMediaService : ObservableObject, IDisposable
             }
             else
             {
-                _position = _reportedPosition + (now - _positionStamp);
-                if (_duration > TimeSpan.Zero && _position > _duration)
-                    _position = _duration;
+                TimeSpan expected = _isPlaying ? _reportedPosition + (now - _positionStamp) : _reportedPosition;
+                if (_duration > TimeSpan.Zero && expected > _duration) expected = _duration;
+
+                bool restarted = reported < TimeSpan.FromSeconds(1) && _duration > TimeSpan.FromSeconds(1) &&
+                                 (expected >= _duration || Math.Abs((_duration - previousDuration).TotalSeconds) > 1d);
+                bool seeked = reported > TimeSpan.Zero &&
+                              Math.Abs((reported - expected).TotalSeconds) > 1.5d;
+
+                if (!_isPlaying || restarted || seeked)
+                {
+                    _position = reported;
+                    _reportedPosition = reported;
+                    _positionStamp = now;
+                }
+                else
+                {
+                    _position = expected;
+                }
             }
             RaiseProgress();
         }
@@ -114,7 +145,7 @@ public sealed class SystemMediaService : ObservableObject, IDisposable
         try
         {
             _manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
-            if (_disposed) return;
+            if (_disposed || _paused) return;
 
             _manager.CurrentSessionChanged += OnCurrentSessionChanged;
             _manager.SessionsChanged += OnSessionsChanged;
@@ -126,14 +157,14 @@ public sealed class SystemMediaService : ObservableObject, IDisposable
     private void OnCurrentSessionChanged(GlobalSystemMediaTransportControlsSessionManager sender,
         CurrentSessionChangedEventArgs args)
     {
-        if (_disposed || _manager is null) return;
+        if (_disposed || _paused || _manager is null) return;
         Attach(_manager.GetCurrentSession());
     }
 
     private void OnSessionsChanged(GlobalSystemMediaTransportControlsSessionManager sender,
         SessionsChangedEventArgs args)
     {
-        if (_disposed || _manager is null) return;
+        if (_disposed || _paused || _manager is null) return;
         Attach(_manager.GetCurrentSession());
     }
 
@@ -169,17 +200,26 @@ public sealed class SystemMediaService : ObservableObject, IDisposable
     }
 
     private void OnMediaPropertiesChanged(GlobalSystemMediaTransportControlsSession sender,
-        MediaPropertiesChangedEventArgs args) => _ = RefreshAsync();
+        MediaPropertiesChangedEventArgs args)
+    {
+        if (!_paused) _ = RefreshAsync();
+    }
 
     private void OnPlaybackInfoChanged(GlobalSystemMediaTransportControlsSession sender,
-        PlaybackInfoChangedEventArgs args) => _ = RefreshAsync();
+        PlaybackInfoChangedEventArgs args)
+    {
+        if (!_paused) _ = RefreshAsync();
+    }
 
     private void OnTimelineChanged(GlobalSystemMediaTransportControlsSession sender,
-        TimelinePropertiesChangedEventArgs args) => UpdateTimeline();
+        TimelinePropertiesChangedEventArgs args)
+    {
+        if (!_paused) UpdateTimeline();
+    }
 
     private async Task RefreshAsync()
     {
-        if (_disposed) return;
+        if (_disposed || _paused) return;
         int version = ++_version;
         var session = _session;
 

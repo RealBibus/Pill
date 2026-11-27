@@ -12,6 +12,10 @@ public sealed class WaveformControl : Control
         nameof(AudioSource), typeof(AudioEqualizer), typeof(WaveformControl),
         new PropertyMetadata(null));
 
+    public static readonly DependencyProperty RenderEnabledProperty = DependencyProperty.Register(
+        nameof(RenderEnabled), typeof(bool), typeof(WaveformControl),
+        new PropertyMetadata(false, OnRenderEnabledChanged));
+
     private readonly float[] _buffer = new float[AudioEqualizer.WaveformLength];
     private readonly Point[] _points = new Point[AudioEqualizer.WaveformLength];
     private readonly StreamGeometry _geometry = new();
@@ -38,8 +42,8 @@ public sealed class WaveformControl : Control
         };
         _linePen.Freeze();
 
-        Loaded += (_, _) => CompositionTarget.Rendering += OnRendering;
-        Unloaded += (_, _) => CompositionTarget.Rendering -= OnRendering;
+        IsVisibleChanged += (_, _) => UpdateHook();
+        Unloaded += (_, _) => Detach();
     }
 
     public AudioEqualizer? AudioSource
@@ -48,15 +52,51 @@ public sealed class WaveformControl : Control
         set => SetValue(AudioSourceProperty, value);
     }
 
+    public bool RenderEnabled
+    {
+        get => (bool)GetValue(RenderEnabledProperty);
+        set => SetValue(RenderEnabledProperty, value);
+    }
+
+    private static void OnRenderEnabledChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        => ((WaveformControl)d).UpdateHook();
+
+    private bool _hooked;
+
+    private void UpdateHook()
+    {
+        bool shouldHook = IsVisible && RenderEnabled;
+        if (shouldHook == _hooked) return;
+        _hooked = shouldHook;
+        if (shouldHook)
+        {
+            _lastFrameTime = TimeSpan.FromMilliseconds(-1);
+            CompositionTarget.Rendering += OnRendering;
+        }
+        else
+        {
+            CompositionTarget.Rendering -= OnRendering;
+        }
+    }
+
+    private void Detach()
+    {
+        if (!_hooked) return;
+        _hooked = false;
+        CompositionTarget.Rendering -= OnRendering;
+    }
+
     private void OnRendering(object? sender, EventArgs e)
     {
-        if (e is RenderingEventArgs args)
+        if (!_hooked || !RenderEnabled || e is not RenderingEventArgs args) return;
+        if (args.RenderingTime == _lastFrameTime) return;
+        if (_lastFrameTime >= TimeSpan.Zero)
         {
-            if (args.RenderingTime == _lastFrameTime) return;
-            if (_lastFrameTime >= TimeSpan.Zero)
-                _frameMs = Math.Clamp((args.RenderingTime - _lastFrameTime).TotalMilliseconds, 4, 50);
-            _lastFrameTime = args.RenderingTime;
+            double elapsed = (args.RenderingTime - _lastFrameTime).TotalMilliseconds;
+            if (elapsed < 50d) return;
+            _frameMs = Math.Clamp(elapsed, 4, 50);
         }
+        _lastFrameTime = args.RenderingTime;
         InvalidateVisual();
     }
 

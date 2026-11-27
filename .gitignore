@@ -399,3 +399,11 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# Pill local API and signing secrets
+weather.local.json
+weather.json
+secrets.json
+appsettings.local.json
+*.local.json
+updates/*.pfx

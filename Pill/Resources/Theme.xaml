@@ -9,15 +9,14 @@
 
     
     <LinearGradientBrush x:Key="PillBackground" StartPoint="0,0" EndPoint="1,1">
-        <GradientStop Color="#FF141A2B" Offset="0" />
-        <GradientStop Color="#FF090D16" Offset="0.35" />
-        <GradientStop Color="#FF020305" Offset="1" />
+        <GradientStop Color="#E6141A2B" Offset="0" />
+        <GradientStop Color="#D9090D16" Offset="0.35" />
+        <GradientStop Color="#DB020305" Offset="1" />
     </LinearGradientBrush>
 
     <SolidColorBrush x:Key="TextPrimary" Color="#FFF4F4F4" />
     <SolidColorBrush x:Key="TextSecondary" Color="#FFB4B4B4" />
     <SolidColorBrush x:Key="TextDim" Color="#FF7A7A7A" />
-    <SolidColorBrush x:Key="SurfaceSoft" Color="#0EFFFFFF" />
     <SolidColorBrush x:Key="SurfaceHover" Color="#1AFFFFFF" />
 
     
@@ -27,7 +26,6 @@
     <Geometry x:Key="IconNext">M19,4 v16 M5,4 L15,12 L5,20 Z</Geometry>
     <Geometry x:Key="IconClose">M5,5 L15,15 M15,5 L5,15</Geometry>
     <Geometry x:Key="IconChevron">M4,8 L10,14 L16,8</Geometry>
-    <Geometry x:Key="IconClip">M9,3 a3,3 0 0,0 -3,3 v8 a5,5 0 0,0 10,0 V8 h-2 v6 a3,3 0 0,1 -6,0 V6 a1,1 0 0,1 2,0 v8 h2 V6 a3,3 0 0,0 -3,-3 Z</Geometry>
     <Geometry x:Key="IconPalette">M12,3 a9,9 0 0,0 0,18 h1.5 a2,2 0 0,0 1.8,-2.9 a2,2 0 0,1 1.8,-2.9 H19 a2,2 0 0,0 2,-2 A9,9 0 0,0 12,3 Z M7.5,11.5 a1.2,1.2 0 1,1 0,-2.4 a1.2,1.2 0 0,1 0,2.4 Z M10.5,8 a1.2,1.2 0 1,1 0,-2.4 a1.2,1.2 0 0,1 0,2.4 Z M14.5,7.5 a1.2,1.2 0 1,1 0,-2.4 a1.2,1.2 0 0,1 0,2.4 Z</Geometry>
     <Geometry x:Key="IconTrash">M5,7 H19 M9,7 V5 H15 V7 M7,7 L8,20 H16 L17,7 M10.5,10.5 V17 M13.5,10.5 V17</Geometry>
     <Geometry x:Key="IconMouse">M12,3 a6,6 0 0,0 -6,6 v6 a6,6 0 0,0 12,0 V9 a6,6 0 0,0 -6,-6 Z M12,3 v6</Geometry>
@@ -38,12 +36,6 @@
         <Setter Property="Foreground" Value="{StaticResource TextDim}" />
         <Setter Property="FontSize" Value="9.5" />
         <Setter Property="FontWeight" Value="SemiBold" />
-    </Style>
-
-    <Style x:Key="SmallText" TargetType="TextBlock">
-        <Setter Property="Foreground" Value="{StaticResource TextSecondary}" />
-        <Setter Property="FontSize" Value="11" />
-        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
     </Style>
 
     
@@ -136,8 +128,8 @@
     </Style>
 
     <Style x:Key="HeaderButton" TargetType="Button" BasedOn="{StaticResource TinyButton}">
-        <Setter Property="Width" Value="28" />
-        <Setter Property="Height" Value="28" />
+        <Setter Property="Width" Value="26" />
+        <Setter Property="Height" Value="26" />
     </Style>
 
     <Style TargetType="ScrollBar">

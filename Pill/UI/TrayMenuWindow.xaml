@@ -17,7 +17,6 @@
         KeyDown="Window_KeyDown"
         Closing="Window_Closing">
     <Window.Resources>
-        <SolidColorBrush x:Key="MenuAccentBrush" Color="#FF5B8CFF"/>
         <SolidColorBrush x:Key="MenuHoverBrush" Color="#1AFFFFFF"/>
         <SolidColorBrush x:Key="MenuPressBrush" Color="#0FFFFFFF"/>
         <SolidColorBrush x:Key="MenuIdleBrush" Color="#00FFFFFF"/>
@@ -70,7 +69,7 @@
                         <Grid>
                             <Border x:Name="Track" CornerRadius="10" Background="#33FFFFFF"/>
                             <Border x:Name="TrackOn" CornerRadius="10" Opacity="0"
-                                    Background="{StaticResource MenuAccentBrush}"/>
+                                    Background="{Binding AccentBrush, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"/>
                             <Ellipse x:Name="Knob" Width="12" Height="12" Fill="#FFB9B9BE"
                                      HorizontalAlignment="Left" VerticalAlignment="Center" Margin="4,0,0,0"
                                      RenderTransformOrigin="0.5,0.5">
@@ -141,6 +140,39 @@
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter Property="Background" Value="{StaticResource MenuPressBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="MenuInput" TargetType="TextBox">
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="Background" Value="#14FFFFFF"/>
+            <Setter Property="Foreground" Value="#F2FFFFFF"/>
+            <Setter Property="CaretBrush" Value="#F2FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#22FFFFFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="7,2"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6" SnapsToDevicePixels="True">
+                            <ScrollViewer x:Name="PART_ContentHost" Focusable="False"
+                                          HorizontalScrollBarVisibility="Hidden"
+                                          VerticalScrollBarVisibility="Hidden"
+                                          Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush"
+                                        Value="{Binding AccentBrush, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -221,7 +253,7 @@
                     <StackPanel>
                         <Border x:Name="AmbientHit" Background="Transparent" MouseLeftButtonUp="AmbientHit_MouseUp" Cursor="Hand">
                             <Grid Height="22">
-                                <TextBlock Text="Ambient color" Style="{StaticResource SubItemLabel}"/>
+                                <TextBlock Text="Cover art color" Style="{StaticResource SubItemLabel}"/>
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right">
                                     <TextBlock x:Name="AmbientValue" Text="Off" Style="{StaticResource SectionValue}"/>
                                     <TextBlock Text="&#xE76C;" FontFamily="Segoe MDL2 Assets" FontSize="10"
@@ -233,12 +265,51 @@
                             <TextBlock Text="Accent" Style="{StaticResource SubItemLabel}" VerticalAlignment="Center"/>
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                                 <Border Width="14" Height="14" CornerRadius="7" Margin="0,0,8,0"
-                                        Background="{StaticResource MenuAccentBrush}" BorderBrush="#33000000" BorderThickness="1"/>
+                                        Background="{Binding AccentBrush, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" BorderBrush="#33000000" BorderThickness="1"/>
                                 <TextBlock x:Name="AccentValue" Text="#5B8CFF" Style="{StaticResource SectionValue}"/>
                             </StackPanel>
                         </Grid>
                         <Button x:Name="ResetAccentButton" Style="{StaticResource MenuButton}"
                                 Content="Reset accent" Margin="0,2,0,0" Click="ResetAccentButton_Click"/>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="WEATHER" Style="{StaticResource GroupHeader}"/>
+                <Border Style="{StaticResource PopPanel}" Background="{StaticResource CardBrush}" CornerRadius="8" Padding="10,6" Margin="0,0,0,7">
+                    <StackPanel>
+                        <Grid Height="24">
+                            <TextBlock Text="City" Style="{StaticResource SubItemLabel}" VerticalAlignment="Center"/>
+                            <TextBox x:Name="WeatherCityBox" Style="{StaticResource MenuInput}" Width="156"
+                                     HorizontalAlignment="Right" TextChanged="WeatherField_TextChanged"/>
+                        </Grid>
+                        <Grid Height="24" Margin="0,4,0,0">
+                            <TextBlock Text="Country code" Style="{StaticResource SubItemLabel}" VerticalAlignment="Center"/>
+                            <TextBox x:Name="WeatherCountryBox" Style="{StaticResource MenuInput}" Width="156"
+                                     HorizontalAlignment="Right" TextChanged="WeatherField_TextChanged"/>
+                        </Grid>
+                        <Grid Height="22" Margin="0,4,0,0">
+                            <TextBlock Text="Device location" Style="{StaticResource SubItemLabel}" VerticalAlignment="Center"/>
+                            <ToggleButton Grid.Column="1" x:Name="DeviceLocationToggle" Style="{StaticResource SwitchToggle}"
+                                          HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                        </Grid>
+                        <Grid Height="24" Margin="0,4,0,0">
+                            <TextBlock Text="Units" Style="{StaticResource SubItemLabel}" VerticalAlignment="Center"/>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button x:Name="CelsiusButton" Style="{StaticResource MenuButton}" Tag="C"
+                                        Content="°C" Width="40" Padding="6,3" Click="UnitButton_Click"/>
+                                <Button x:Name="FahrenheitButton" Style="{StaticResource MenuButton}" Tag="F"
+                                        Content="°F" Width="40" Padding="6,3" Margin="4,0,0,0" Click="UnitButton_Click"/>
+                            </StackPanel>
+                        </Grid>
+                        <Button x:Name="DetectLocationButton" Style="{StaticResource MenuButton}"
+                                Content="Detect my location" Margin="0,5,0,0" Click="DetectLocationButton_Click"/>
+                        <Grid Height="18" Margin="0,3,0,0">
+                            <TextBlock x:Name="WeatherLocationText" Text="Detecting location"
+                                       Style="{StaticResource SubItemLabel}" FontSize="10"
+                                       TextTrimming="CharacterEllipsis" Margin="0,0,70,0"/>
+                            <TextBlock x:Name="WeatherValueText" Text="--°C" Style="{StaticResource SectionValue}"
+                                       FontSize="10.5"/>
+                        </Grid>
                     </StackPanel>
                 </Border>
 
@@ -260,6 +331,14 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="Auto updates" Style="{StaticResource SubItemLabel}" VerticalAlignment="Center"/>
                             <ToggleButton Grid.Column="1" x:Name="AutoUpdateToggle" Style="{StaticResource SwitchToggle}" VerticalAlignment="Center"/>
+                        </Grid>
+                        <Grid Height="22">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Hide in fullscreen games" Style="{StaticResource SubItemLabel}" VerticalAlignment="Center"/>
+                            <ToggleButton Grid.Column="1" x:Name="HideInGamesToggle" Style="{StaticResource SwitchToggle}" VerticalAlignment="Center"/>
                         </Grid>
                     </StackPanel>
                 </Border>
@@ -290,7 +369,7 @@
                                 </ScrollViewer>
                                 <ProgressBar x:Name="UpdateProgress" Height="4" Minimum="0" Maximum="1"
                                              Background="#33FFFFFF" BorderThickness="0"
-                                             Foreground="{StaticResource MenuAccentBrush}" Margin="0,0,0,6"/>
+                                             Foreground="{Binding AccentBrush, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Margin="0,0,0,6"/>
                                 <Button x:Name="UpdateNowButton" Style="{StaticResource MenuButton}"
                                         Content="Update &amp; restart" Margin="0,0,0,2"/>
                                 <Button x:Name="DeferButton" Style="{StaticResource MenuButton}"

@@ -1,19 +1,25 @@
-Pill 1.0.0 beta — first public build.
+Pill 1.0.1 beta — performance and cleanup release.
 
-This is a Windows dynamic island: a black capsule pinned to the top of the screen with a live media player, equalizer, waveform, ambient color from the active window, a drop shelf for files, and signed OTA updates from GitHub Releases.
+This build keeps the same capsule, weather, tray menu, installer and signed OTA flow, but removes the background work that could reduce a game from 120 fps to 60 fps.
 
-What changed in this build:
+What changed:
 
-- Replaced the old WinForms context menu with a separate WPF tray menu in the Aerisflow style: blurred glass, rounded cards, thin scrollbar, switches and update card. It closes on an outside click, on Esc, or from the tray icon.
-- Reduced the menu to what is actually needed: AMBIENT, SYSTEM and UPDATES. Removed the player and behavior controls from the menu.
-- Reworked the ambient color: area-weighted dominant hue from the active window, no blue mixing and no album-art influence, small accents below 1.5% ignored, saturation raised to at least 55%, applied immediately when the window changes, with a smooth 320 ms accent transition. Menu accents now fall back to the default blue instead of turning gray when the active window is gray.
-- Kept the capsule fixed-size: 380x66 collapsed, 480x330 expanded, 40x40 and 52x52 cover art, 68 px waveform, no overlapping elements. The background stays black with the #141A2B to #020305 gradient and a 16% accent layer.
-- Fixed battery reporting: only real connected batteries with DEVPKEY_Device_BatteryLevel are shown, phones are excluded, and devices such as Mchose A7 Ultra / G435 show a dash.
-- Fixed network reporting: the active adapter is resolved with GetBestInterface(8.8.8.8) and GetAdaptersInfo; the lower panel is DROPSHELF.
-- Added a separate hand-written installer (no Inno Setup). It supports silent --install / --uninstall, a Start menu shortcut, a Run entry and an uninstall registry entry. Uninstall keeps settings.json and removes the app folders, current.json, device.json, shortcut and registry entries.
-- Replaced the old zip-based updater with a signed manifest system: manifest.json + manifest.sig, RSA/SHA256 verification, per-file SHA256 checks, staged app-<version> folders, current.json, beta/stable channels, rollout percentage, release notes, deferred installation and automatic restart. Updates are available only in installed builds; portable builds show "Only in installed builds".
-- Settings live in %LOCALAPPDATA%\Pill\settings.json and survive updates and uninstall.
+- Fullscreen game detection now uses a foreground-window hook, so the capsule hides and suspends immediately instead of waiting for a poll. A slow safety poll remains for windows that become fullscreen without changing focus.
+- While hidden or in a fullscreen game, WASAPI capture, FFT, waveform rendering, media timeline polling, battery/network refresh and hover polling all stop. The process stays almost idle.
+- WASAPI loopback capture starts only when the capsule is expanded and a track is actually playing. It is released on collapse, on manual hide and on game detection.
+- CompositionTarget.Rendering hooks are attached only while the relevant visual is visible; idle waveform and equalizer updates are capped at 20 fps instead of following the display refresh rate.
+- Hover detection now uses cached DPI and a cheap screen-position rejection before any transform or layout query is made.
+- Restored the dark acrylic blur on the tray menu and installer with the same safe, guarded composition calls. Removed the unused key-generation helper, unused theme resources and throwaway keyword array allocations from the status refresh path.
+- Simplified the expanded WEATHER card: a quiet translucent panel with just the icon, temperature and condition. The temperature and condition now stay fully inside the panel instead of clipping at its edge, and the card does not overlap the player or dropshelf.
+- Added more breathing room between the weather card and the waveform/progress panel.
+- Seeking in a video or track no longer resets the progress bar and position: transient zero timestamps from the media session are ignored while playback continues, while a real seek is applied immediately.
+- Moved the small level meter out of the weather row and next to the source label, where the music status belongs.
+- Fixed button and outline overflow in the header, player row and dropshelf row.
+- Listening time is now saved to settings every 30 seconds and on exit, survives app restarts and updates, and keeps counting through brief SMTC session switches common with browser videos.
+- Kept the capsule fixed-size: 380x66 collapsed, 480x330 expanded. The compact capsule always shows the clock and weather — a larger time, weather icon and temperature with an explicit °C/°F unit — next to the current cover, title and artist.
+- Kept click-through in the collapsed capsule and full interactivity in the expanded capsule.
+- Kept automatic hiding in borderless fullscreen games. Fullscreen windows with close, minimize and maximize controls stay visible, and the capsule returns when the game exits.
+- Kept battery reporting limited to real connected batteries with DEVPKEY_Device_BatteryLevel, excluded phone-like devices and the network route lookup through GetBestInterface(8.8.8.8).
+- Kept the separate hand-written installer and the signed manifest updater with beta/stable channels, rollout, deferred installation and automatic restart.
 
-Install with Pill.Installer.exe or Pill.exe --install.
-
-This release was put together in a hurry. It is beta, not a final version. About half of the decisions may change in a patch: ambient color behavior, animation timing, menu layout, settings format, installer and the update flow.
+Install with Pill.Installer.exe or Pill.exe --install. Updates remain available only in installed builds.

@@ -14,7 +14,7 @@ namespace Pill.Services;
 public sealed class AudioEqualizer : ObservableObject, IDisposable
 {
     public const int BandCount = 7;
-    public const int WaveformLength = 256;
+    public const int WaveformLength = 128;
 
     private const int FftPower = 10;
     private const int FftSize = 1 << FftPower;
@@ -36,13 +36,15 @@ public sealed class AudioEqualizer : ObservableObject, IDisposable
     private double _frameMs = 16.7;
     private TimeSpan _lastFrameTime = TimeSpan.FromMilliseconds(-1);
     private float _peak = 0.05f;
-    private float _signalPeak;
+    private volatile float _signalPeak;
     public double Sensitivity { get; set; } = 1d;
     public double WaveformGain { get; set; } = 1d;
     private WasapiLoopbackCapture? _capture;
     private MMDeviceEnumerator? _enumerator;
     private bool _disposed;
     private bool _isActive;
+    private bool _paused;
+    private bool _renderingEnabled;
     private string _status = "WAITING FOR AUDIO";
     private string _deviceName = "";
 
@@ -71,16 +73,67 @@ public sealed class AudioEqualizer : ObservableObject, IDisposable
         for (int i = 0; i < FftSize; i++)
             _window[i] = 0.5f * (1f - (float)Math.Cos(2 * Math.PI * i / (FftSize - 1)));
 
-        CompositionTarget.Rendering += OnRendering;
+        _retryTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
+        _retryTimer.Tick += (_, _) => { if (!_paused && !IsActive) Start(); };
+    }
 
-        _retryTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
-        _retryTimer.Tick += (_, _) => { if (!IsActive) Start(); };
-        _retryTimer.Start();
+    public void SetRenderingEnabled(bool enabled)
+    {
+        if (_disposed || _renderingEnabled == enabled) return;
+        _renderingEnabled = enabled;
+        if (enabled)
+        {
+            CompositionTarget.Rendering += OnRendering;
+            if (!_paused) Start();
+        }
+        else
+        {
+            CompositionTarget.Rendering -= OnRendering;
+            _retryTimer.Stop();
+            _lastFrameTime = TimeSpan.FromMilliseconds(-1);
+            if (!_paused)
+            {
+                StopCapture();
+                Status = "IDLE";
+            }
+        }
+    }
+
+    public void SetPaused(bool paused)
+    {
+        if (_disposed || _paused == paused) return;
+        _paused = paused;
+        if (paused)
+        {
+            _retryTimer.Stop();
+            StopCapture();
+            Status = "PAUSED";
+        }
+        else
+        {
+            Status = "WAITING FOR AUDIO";
+            if (_renderingEnabled && !IsActive) Start();
+        }
+    }
+
+    private void StopCapture()
+    {
+        var capture = _capture;
+        _capture = null;
+        if (capture is null) return;
+        try
+        {
+            capture.DataAvailable -= OnDataAvailable;
+            capture.StopRecording();
+            capture.Dispose();
+        }
+        catch { }
+        IsActive = false;
     }
 
     public void Start()
     {
-        if (_disposed || IsActive) return;
+        if (_disposed || _paused || !_renderingEnabled || IsActive) return;
 
         try
         {
@@ -109,6 +162,7 @@ public sealed class AudioEqualizer : ObservableObject, IDisposable
                     capture.StartRecording();
 
                     _capture = capture;
+                    _retryTimer.Stop();
                     DeviceName = device.FriendlyName ?? "Output device";
                     Status = $"LIVE · {capture.WaveFormat.SampleRate / 1000} kHz";
                     IsActive = true;
@@ -119,11 +173,13 @@ public sealed class AudioEqualizer : ObservableObject, IDisposable
 
             Status = "NO OUTPUT DEVICE";
             IsActive = false;
+            _retryTimer.Start();
         }
         catch
         {
             Status = "CAPTURE UNAVAILABLE";
             IsActive = false;
+            _retryTimer.Start();
         }
     }
 
@@ -227,13 +283,17 @@ public sealed class AudioEqualizer : ObservableObject, IDisposable
 
     private void OnRendering(object? sender, EventArgs e)
     {
-        if (_disposed) return;
+        if (_disposed || !_renderingEnabled) return;
 
         if (e is RenderingEventArgs args)
         {
             if (args.RenderingTime == _lastFrameTime) return;
             if (_lastFrameTime >= TimeSpan.Zero)
-                _frameMs = Math.Clamp((args.RenderingTime - _lastFrameTime).TotalMilliseconds, 4, 50);
+            {
+                double elapsed = (args.RenderingTime - _lastFrameTime).TotalMilliseconds;
+                if (elapsed < 50d) return;
+                _frameMs = Math.Clamp(elapsed, 4, 50);
+            }
             _lastFrameTime = args.RenderingTime;
         }
 
@@ -245,15 +305,6 @@ public sealed class AudioEqualizer : ObservableObject, IDisposable
         lock (_sync)
         {
             bool quiet = !IsActive || _signalPeak < 0.003f;
-            if (quiet)
-            {
-                float idle = !IsActive
-                    ? (float)(0.035 + 0.02 * (0.5 + 0.5 * Math.Sin(_phase * 0.08)))
-                    : 0.014f;
-                for (int i = 0; i < WaveformLength; i++)
-                    _waveform[i] = (float)(idle * Math.Sin(i * 0.16 + _phase * 0.09));
-            }
-
             for (int i = 0; i < BandCount; i++)
             {
                 double target;
@@ -276,11 +327,20 @@ public sealed class AudioEqualizer : ObservableObject, IDisposable
     public void CopyWaveform(float[] destination)
     {
         if (destination.Length < WaveformLength) return;
+        bool quiet = !IsActive || _signalPeak < 0.003f;
+        float idle = !IsActive
+            ? (float)(0.035 + 0.02 * (0.5 + 0.5 * Math.Sin(_phase * 0.08)))
+            : 0.014f;
+
         lock (_sync)
         {
             for (int i = 0; i < WaveformLength; i++)
-                destination[i] = (float)Math.Clamp(
-                    _waveform[(_waveIndex + 1 + i) % WaveformLength] * WaveformGain, -1f, 1f);
+            {
+                float value = quiet
+                    ? (float)(idle * Math.Sin(i * 0.22 + _phase * 0.09))
+                    : _waveform[(_waveIndex + 1 + i) % WaveformLength];
+                destination[i] = (float)Math.Clamp(value * WaveformGain, -1f, 1f);
+            }
         }
     }
 
@@ -288,21 +348,9 @@ public sealed class AudioEqualizer : ObservableObject, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        CompositionTarget.Rendering -= OnRendering;
+        if (_renderingEnabled) CompositionTarget.Rendering -= OnRendering;
         _retryTimer.Stop();
-
-        var capture = _capture;
-        _capture = null;
-        if (capture is not null)
-        {
-            try
-            {
-                capture.DataAvailable -= OnDataAvailable;
-                capture.StopRecording();
-                capture.Dispose();
-            }
-            catch { }
-        }
+        StopCapture();
         _enumerator?.Dispose();
         _enumerator = null;
         IsActive = false;

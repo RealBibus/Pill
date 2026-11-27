@@ -34,7 +34,7 @@
                 HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0"
                 CornerRadius="30"
                 Background="{StaticResource PillBackground}"
-                BorderThickness="0"
+                BorderBrush="#18FFFFFF" BorderThickness="1"
                 MouseEnter="Root_MouseEnter"
                 MouseLeave="Root_MouseLeave">
             <Border.Effect>
@@ -66,54 +66,60 @@
                           VerticalAlignment="Center">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="44" />
-                            <RowDefinition Height="3" />
+                            <RowDefinition Height="6" />
                         </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="40" />
+                            <ColumnDefinition Width="9" />
                             <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="124" />
                         </Grid.ColumnDefinitions>
 
-                        <Border Width="40" Height="40" CornerRadius="10" Background="#16FFFFFF"
-                                VerticalAlignment="Center">
+                        <Border Grid.Row="0" Width="40" Height="40" CornerRadius="12" Background="#14FFFFFF"
+                                BorderBrush="#20FFFFFF" BorderThickness="1" VerticalAlignment="Center">
                             <Grid>
-                                <TextBlock Text="♫" FontSize="16" Foreground="#A8A8A8"
+                                <TextBlock Text="♫" FontSize="15" Foreground="#9A9A9A"
                                            HorizontalAlignment="Center" VerticalAlignment="Center" />
                                 <Image Source="{Binding Media.Cover}" Stretch="UniformToFill">
                                     <Image.Clip>
-                                        <RectangleGeometry Rect="0,0,40,40" RadiusX="10" RadiusY="10" />
+                                        <RectangleGeometry Rect="0,0,40,40" RadiusX="12" RadiusY="12" />
                                     </Image.Clip>
                                 </Image>
+                                <Border Width="16" Height="16" CornerRadius="8" Panel.ZIndex="2"
+                                        HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-3,-3,0"
+                                        Background="{Binding AccentBrush, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                        Visibility="{Binding HasShelfItems, Converter={StaticResource BoolToVisibility}}">
+                                    <TextBlock Text="{Binding ShelfCount}" FontSize="9" FontWeight="Bold"
+                                               Foreground="#FF101010" HorizontalAlignment="Center"
+                                               VerticalAlignment="Center" />
+                                </Border>
                             </Grid>
                         </Border>
 
-                        <StackPanel Grid.Column="1" Margin="12,0,6,0" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding Media.Title}" FontSize="13" FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextPrimary}" MaxWidth="180"
+                        <StackPanel Grid.Row="0" Grid.Column="2" VerticalAlignment="Center" Margin="0,0,4,0">
+                            <TextBlock Text="{Binding Media.Title}" FontSize="13.5" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimary}" MaxWidth="168"
                                        TextTrimming="CharacterEllipsis" />
                             <TextBlock Text="{Binding Media.Artist}" FontSize="10.5"
-                                       Foreground="{StaticResource TextSecondary}" MaxWidth="180"
+                                       Foreground="{StaticResource TextSecondary}" MaxWidth="168"
                                        TextTrimming="CharacterEllipsis" Margin="0,3,0,0" />
                         </StackPanel>
 
-                        <controls:WaveformControl Grid.Column="2" AudioSource="{Binding Equalizer}"
-                                                  Width="48" Height="20" VerticalAlignment="Center"
-                                                  IsHitTestVisible="False" Margin="0,0,4,0" />
-
-                        <Border Grid.Column="3" Height="22" MinWidth="24" CornerRadius="11"
-                                Background="#20FFFFFF" Margin="2,0,0,0" VerticalAlignment="Center"
-                                Visibility="{Binding HasShelfItems, Converter={StaticResource BoolToVisibility}}">
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="5,0,6,0">
-                                <Path Data="{StaticResource IconClip}" Width="10" Height="10" Stretch="Uniform"
-                                      Stroke="{StaticResource TextSecondary}" StrokeThickness="1.4" />
-                                <TextBlock Text="{Binding ShelfCount}" FontSize="10.5" FontWeight="SemiBold"
-                                           Foreground="{StaticResource TextPrimary}" Margin="3,0,0,0" />
+                        <StackPanel Grid.Row="0" Grid.Column="3" VerticalAlignment="Center" HorizontalAlignment="Right">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <TextBlock Text="{Binding Status.ClockText}" FontSize="20" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding Weather.Icon}" FontSize="15" Margin="8,0,3,0"
+                                           Foreground="{Binding AccentBrush, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                           VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding Weather.Temperature}" FontSize="15" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center" />
                             </StackPanel>
-                        </Border>
+                        </StackPanel>
 
-                        <Border Grid.Row="1" Grid.ColumnSpan="4" Height="3" CornerRadius="1.5"
-                                Background="#20FFFFFF" Margin="0,2,0,0" ClipToBounds="True">
+                        
+                        <Border Grid.Row="1" Grid.ColumnSpan="4" Height="3" Margin="0,1,0,0" CornerRadius="1.5"
+                                Background="#20FFFFFF" ClipToBounds="True" IsHitTestVisible="False">
                             <Border Background="{Binding AccentBrush, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
                                     RenderTransformOrigin="0,0.5">
                                 <Border.RenderTransform>
@@ -130,19 +136,38 @@
                             <TranslateTransform x:Name="ExpandedShift" Y="8" />
                         </Grid.RenderTransform>
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="28" />
-                            <RowDefinition Height="22" />
-                            <RowDefinition Height="60" />
-                            <RowDefinition Height="74" />
-                            <RowDefinition Height="60" />
-                            <RowDefinition Height="22" />
+                            <RowDefinition Height="30" />
+                            <RowDefinition Height="24" />
+                            <RowDefinition Height="72" />
+                            <RowDefinition Height="66" />
+                            <RowDefinition Height="56" />
+                            <RowDefinition Height="30" />
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
 
                         
                         <Grid Grid.Row="0">
-                            <TextBlock Text="{Binding Media.Source}" Style="{StaticResource Caption}"
-                                       Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" />
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Media.Source}" Style="{StaticResource Caption}"
+                                           Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" />
+                                <ItemsControl ItemsSource="{Binding Equalizer.Levels}" Width="28" Height="12"
+                                              Margin="8,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False"
+                                              Opacity="0.75"
+                                              Visibility="{Binding HasMusic, Converter={StaticResource BoolToVisibility}}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Bottom" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Width="2" Margin="1,0,1,0" CornerRadius="1"
+                                                    VerticalAlignment="Bottom" Background="{Binding AccentBrush, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                                    Height="{Binding Converter={StaticResource LevelToHeight}, ConverterParameter=9}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                 <Button Style="{StaticResource HeaderButton}" Click="AmbientButton_Click">
                                     <Grid>
@@ -170,28 +195,28 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
 
-                            <TextBlock Text="{Binding Status.ClockText}" FontSize="11.5" FontWeight="SemiBold"
+                            <TextBlock Text="{Binding Status.ClockText}" FontSize="12" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center" />
 
                             <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center"
                                         VerticalAlignment="Center">
-                                <Path Data="{StaticResource IconMouse}" Width="10" Height="10" Stretch="Uniform"
+                                <Path Data="{StaticResource IconMouse}" Width="11" Height="11" Stretch="Uniform"
                                       Stroke="{StaticResource TextDim}" StrokeThickness="1.3" />
-                                <TextBlock Text="{Binding Status.MouseBattery}" FontSize="9.5"
-                                           Foreground="{StaticResource TextSecondary}" Margin="3,0,0,0"
+                                <TextBlock Text="{Binding Status.MouseBattery}" FontSize="10.5"
+                                           Foreground="{StaticResource TextSecondary}" Margin="4,0,0,0"
                                            VerticalAlignment="Center" />
-                                <Border Width="1" Height="9" Background="#20FFFFFF" Margin="8,0" />
-                                <Path Data="{StaticResource IconHeadphones}" Width="10" Height="10" Stretch="Uniform"
+                                <Border Width="1" Height="10" Background="#20FFFFFF" Margin="10,0" />
+                                <Path Data="{StaticResource IconHeadphones}" Width="11" Height="11" Stretch="Uniform"
                                       Stroke="{StaticResource TextDim}" StrokeThickness="1.3" />
-                                <TextBlock Text="{Binding Status.HeadphonesBattery}" FontSize="9.5"
-                                           Foreground="{StaticResource TextSecondary}" Margin="3,0,0,0"
+                                <TextBlock Text="{Binding Status.HeadphonesBattery}" FontSize="10.5"
+                                           Foreground="{StaticResource TextSecondary}" Margin="4,0,0,0"
                                            VerticalAlignment="Center" />
-                                <Border Width="1" Height="9" Background="#20FFFFFF" Margin="8,0" />
-                                <TextBlock Text="LISTENED" FontSize="9" FontWeight="SemiBold"
+                                <Border Width="1" Height="10" Background="#20FFFFFF" Margin="10,0" />
+                                <TextBlock Text="LISTENED" FontSize="9.5" FontWeight="SemiBold"
                                            Foreground="{Binding AccentBrush, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
                                            VerticalAlignment="Center" />
-                                <TextBlock Text="{Binding Status.ListeningText}" FontSize="9.5"
-                                           Foreground="{StaticResource TextPrimary}" Margin="5,0,0,0"
+                                <TextBlock Text="{Binding Status.ListeningText}" FontSize="10"
+                                           Foreground="{StaticResource TextPrimary}" Margin="6,0,0,0"
                                            VerticalAlignment="Center" />
                             </StackPanel>
 
@@ -249,75 +274,91 @@
                         </Grid>
 
                         
-                        <Grid Grid.Row="2" Margin="0,4,0,0" Height="52"
-                              Visibility="{Binding HasMusic, Converter={StaticResource BoolToVisibility}}">
+                        <Grid Grid.Row="2" Margin="0,4,0,0" Height="68">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="64" />
                                 <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="168" />
                             </Grid.ColumnDefinitions>
 
-                            <Border Width="52" Height="52" CornerRadius="10" Background="#13FFFFFF"
-                                    VerticalAlignment="Center">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="60" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <Border Width="52" Height="52" CornerRadius="12" Background="#13FFFFFF"
+                                        VerticalAlignment="Center">
+                                    <Grid>
+                                        <TextBlock Text="♫" FontSize="18" Foreground="#6A6A6A"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        <Image Source="{Binding Media.Cover}" Stretch="UniformToFill">
+                                            <Image.Clip>
+                                                <RectangleGeometry Rect="0,0,52,52" RadiusX="12" RadiusY="12" />
+                                            </Image.Clip>
+                                        </Image>
+                                    </Grid>
+                                </Border>
+
+                                <StackPanel Grid.Column="1" Margin="6,0,8,0" VerticalAlignment="Center"
+                                            Visibility="{Binding HasMusic, Converter={StaticResource BoolToVisibility}}">
+                                    <TextBlock Text="{Binding Media.Title}" FontSize="16" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextPrimary}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding Media.Artist}" FontSize="12"
+                                               Foreground="{StaticResource TextSecondary}" TextTrimming="CharacterEllipsis"
+                                               Margin="0,5,0,0" />
+                                </StackPanel>
+
+                                <Border Grid.Column="1" CornerRadius="12" Background="#09FFFFFF"
+                                        Margin="4,0,0,0"
+                                        Visibility="{Binding HasMusic, Converter={StaticResource BoolToVisibility}, ConverterParameter=invert}">
+                                    <StackPanel VerticalAlignment="Center" Margin="14,0,0,0">
+                                        <TextBlock Text="No music playing" FontSize="14" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextPrimary}" />
+                                        <TextBlock Text="Spotify, browser or Yandex Music" FontSize="10.5"
+                                                   Foreground="{StaticResource TextSecondary}" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+
+                            
+                            <Border Grid.Column="1" Margin="12,0,0,0" CornerRadius="12"
+                                    Background="#0AFFFFFF" Padding="10,5,16,6">
                                 <Grid>
-                                    <TextBlock Text="♫" FontSize="17" Foreground="#6A6A6A"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                    <Image Source="{Binding Media.Cover}" Stretch="UniformToFill">
-                                        <Image.Clip>
-                                            <RectangleGeometry Rect="0,0,52,52" RadiusX="10" RadiusY="10" />
-                                        </Image.Clip>
-                                    </Image>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="12" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Text="WEATHER" Style="{StaticResource Caption}" FontSize="9"
+                                               Foreground="{Binding AccentBrush, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                               HorizontalAlignment="Left" VerticalAlignment="Center" />
+
+                                    <Grid Grid.Row="1">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="30" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding Weather.Icon}" FontSize="24" Width="30"
+                                                   Foreground="{Binding AccentBrush, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                                   TextAlignment="Center" VerticalAlignment="Center" />
+                                        <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Weather.Temperature}" FontSize="24"
+                                                       FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}"
+                                                       HorizontalAlignment="Right" TextAlignment="Right" />
+                                            <TextBlock Text="{Binding Weather.Condition}" FontSize="9"
+                                                       Foreground="{StaticResource TextSecondary}"
+                                                       HorizontalAlignment="Right" TextAlignment="Right"
+                                                       Margin="0,2,0,0" MaxWidth="88"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                    </Grid>
                                 </Grid>
                             </Border>
-
-                            <StackPanel Grid.Column="1" Margin="10,0,8,0" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding Media.Title}" FontSize="15" FontWeight="SemiBold"
-                                           Foreground="{StaticResource TextPrimary}" TextTrimming="CharacterEllipsis" />
-                                <TextBlock Text="{Binding Media.Artist}" FontSize="11.5"
-                                           Foreground="{StaticResource TextSecondary}" TextTrimming="CharacterEllipsis"
-                                           Margin="0,3,0,0" />
-                            </StackPanel>
-
-                            <ItemsControl Grid.Column="2" ItemsSource="{Binding Equalizer.Levels}"
-                                          Width="36" Height="20" VerticalAlignment="Center" IsHitTestVisible="False">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Bottom" />
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Width="4" Margin="1,0,1,0" CornerRadius="2"
-                                                VerticalAlignment="Bottom" Background="{Binding AccentBrush, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
-                                                Height="{Binding Converter={StaticResource LevelToHeight}, ConverterParameter=18}" />
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
                         </Grid>
 
                         
-                        <Grid Grid.Row="2" Margin="0,4,0,0" Height="52"
-                              Visibility="{Binding HasMusic, Converter={StaticResource BoolToVisibility}, ConverterParameter=invert}">
-                            <Border CornerRadius="12" Background="#09FFFFFF">
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <Border Width="38" Height="38" CornerRadius="10" Background="#12FFFFFF">
-                                        <TextBlock Text="♫" FontSize="17" Foreground="#6A6A6A"
-                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                    </Border>
-                                    <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
-                                        <TextBlock Text="No music playing" FontSize="13" FontWeight="SemiBold"
-                                                   Foreground="{StaticResource TextPrimary}" />
-                                        <TextBlock Text="Start Spotify, a browser or Yandex Music"
-                                                   FontSize="9.5" Foreground="{StaticResource TextSecondary}"
-                                                   Margin="0,3,0,0" />
-                                    </StackPanel>
-                                </StackPanel>
-                            </Border>
-                        </Grid>
-
-                        
-                        <Border Grid.Row="3" Margin="0,3,0,0" Height="68" CornerRadius="12"
-                                Background="#08FFFFFF" Padding="10,8,10,7"
+                        <Border Grid.Row="3" Margin="0,14,0,0" Height="52" CornerRadius="12"
+                                Background="#08FFFFFF" Padding="9,6,9,6"
                                 Visibility="{Binding HasMusic, Converter={StaticResource BoolToVisibility}}">
                             <Grid>
                                 <Grid.RowDefinitions>
@@ -326,7 +367,7 @@
                                     <RowDefinition Height="12" />
                                 </Grid.RowDefinitions>
 
-                                <controls:WaveformControl AudioSource="{Binding Equalizer}"
+                                <controls:WaveformControl x:Name="Waveform" AudioSource="{Binding Equalizer}"
                                                           VerticalAlignment="Stretch" IsHitTestVisible="False"
                                                           Margin="0,0,0,2" />
 
@@ -342,15 +383,15 @@
 
                                 <Grid Grid.Row="2" Margin="0,2,0,0">
                                     <TextBlock Text="{Binding Media.PositionText}" Style="{StaticResource Caption}"
-                                               FontSize="9" HorizontalAlignment="Left" />
+                                               FontSize="9.5" HorizontalAlignment="Left" />
                                     <TextBlock Text="{Binding Media.DurationText}" Style="{StaticResource Caption}"
-                                               FontSize="9" HorizontalAlignment="Right" />
+                                               FontSize="9.5" HorizontalAlignment="Right" />
                                 </Grid>
                             </Grid>
                         </Border>
 
                         
-                        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,6,0,8"
+                        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Center"
                                     Visibility="{Binding HasMusic, Converter={StaticResource BoolToVisibility}}">
                             <Button Style="{StaticResource PlayerButton}" Click="Previous_Click"
                                     IsEnabled="{Binding Media.CanPrevious}">
@@ -376,7 +417,7 @@
                         </StackPanel>
 
                         
-                        <Grid Grid.Row="5" Margin="0,0,0,0" Height="22">
+                        <Grid Grid.Row="5" Height="20">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
@@ -384,7 +425,7 @@
                             <Rectangle Grid.Row="0" Height="1" Fill="#14FFFFFF" />
                             <Grid Grid.Row="1" Margin="0,3,0,0">
                                 <TextBlock Text="DROPSHELF" Style="{StaticResource Caption}" VerticalAlignment="Center" />
-                                <Button Style="{StaticResource TinyButton}"
+                                <Button Style="{StaticResource TinyButton}" Width="22" Height="22"
                                         HorizontalAlignment="Right" Click="ClearShelf_Click"
                                         Visibility="{Binding HasShelfItems, Converter={StaticResource BoolToVisibility}}">
                                     <Path Data="{StaticResource IconTrash}" Width="11" Height="11" Stretch="Uniform"

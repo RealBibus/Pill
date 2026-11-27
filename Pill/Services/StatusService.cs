@@ -14,7 +14,13 @@ public sealed class StatusService : ObservableObject, IDisposable
 {
     private readonly DispatcherTimer _clockTimer;
     private readonly DispatcherTimer _deviceTimer;
+    private readonly Action<long>? _persist;
     private bool _disposed;
+    private volatile bool _paused;
+    private volatile bool _refreshing;
+    private bool _mediaPlaying;
+    private DateTime _lastPlayingSignal = DateTime.MinValue;
+    private long _lastPersistedSeconds;
 
     private string _clockText = DateTime.Now.ToString("HH:mm");
     private string _mouseBattery = "—";
@@ -22,7 +28,6 @@ public sealed class StatusService : ObservableObject, IDisposable
     private string _listeningText = "00:00:00";
     private int _networkBars;
 
-    private bool _isPlaying;
     private long _listeningSeconds;
 
     private static readonly Guid BatteryProperty = new("104EA319-6EE2-4701-BD47-8DDBF425BBE5");
@@ -42,6 +47,18 @@ public sealed class StatusService : ObservableObject, IDisposable
     private const uint CrSuccess = 0;
     private const uint DnHasProblem = 0x400;
     private const uint DnDeviceDisconnected = 0x02000000;
+    private static readonly string[] PhoneKeywords =
+        { "phone", "redmi", "iphone", "samsung", "pixel", "huawei", "xiaomi", "телефон" };
+    private static readonly string[] MouseKeywords =
+    {
+        "mouse", "мыш", "trackpad", "touchpad", "mchose", "a7 ultra",
+        "logitech", "mx master", "razer", "steelseries", "deathadder"
+    };
+    private static readonly string[] HeadphonesKeywords =
+    {
+        "headphone", "headset", "наушник", "гарнитур", "earbud", "buds",
+        "airpods", "audio", "hands-free", "handsfree", "mic", "микрофон"
+    };
 
     public string ClockText { get => _clockText; private set => Set(ref _clockText, value); }
     public string MouseBattery { get => _mouseBattery; private set => Set(ref _mouseBattery, value); }
@@ -49,45 +66,81 @@ public sealed class StatusService : ObservableObject, IDisposable
     public string ListeningText { get => _listeningText; private set => Set(ref _listeningText, value); }
     public int NetworkBars { get => _networkBars; private set => Set(ref _networkBars, value); }
 
-    public StatusService()
+    public StatusService(long initialSeconds = 0, Action<long>? persist = null)
     {
+        _persist = persist;
+        _listeningSeconds = Math.Max(0, initialSeconds);
+        _listeningText = FormatDuration(_listeningSeconds);
+        _lastPersistedSeconds = _listeningSeconds;
+
         _clockTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _clockTimer.Tick += OnClockTick;
 
-        _deviceTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
-        _deviceTimer.Tick += (_, _) => RefreshDevices();
+        _deviceTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
+        _deviceTimer.Tick += (_, _) => RefreshDevicesAsync();
     }
 
     public void Start()
     {
-        if (_disposed) return;
+        if (_disposed || _paused) return;
         ClockText = DateTime.Now.ToString("HH:mm");
-        RefreshDevices();
+        RefreshDevicesAsync();
         _clockTimer.Start();
         _deviceTimer.Start();
+    }
+
+    public void SetSuspended(bool suspended)
+    {
+        if (_disposed || _paused == suspended) return;
+        _paused = suspended;
+        if (suspended)
+        {
+            Persist();
+            _deviceTimer.Stop();
+        }
+        else
+        {
+            RefreshDevicesAsync();
+            _deviceTimer.Start();
+        }
+    }
+
+    private void RefreshDevicesAsync()
+    {
+        if (_refreshing || _paused) return;
+        _refreshing = true;
+        _ = System.Threading.Tasks.Task.Run(() =>
+        {
+            try { RefreshDevices(); }
+            finally { _refreshing = false; }
+        });
     }
 
     public void UpdateMedia(bool isPlaying, string title)
     {
         if (_disposed) return;
-        _isPlaying = isPlaying
+        _mediaPlaying = isPlaying
             && !string.IsNullOrWhiteSpace(title)
             && !string.Equals(title, "Nothing playing", StringComparison.Ordinal);
+        if (_mediaPlaying) _lastPlayingSignal = DateTime.UtcNow;
     }
 
     private void OnClockTick(object? sender, EventArgs e)
     {
         ClockText = DateTime.Now.ToString("HH:mm");
-        if (!_isPlaying) return;
+        bool counting = _mediaPlaying ||
+                        DateTime.UtcNow - _lastPlayingSignal <= TimeSpan.FromSeconds(8);
+        if (!counting) return;
+
         _listeningSeconds++;
         UpdateListeningText();
+        if (_listeningSeconds - _lastPersistedSeconds >= 30) Persist();
     }
 
     private void RefreshDevices()
     {
         List<BatteryDevice> devices = ReadBatteries();
-        string[] customMouse = CustomNames("Mouse");
-        string[] customHeadphones = CustomNames("Headphones");
+        ReadCustomNames(out string[] customMouse, out string[] customHeadphones);
 
         BatteryDevice? mouse = Pick(devices, device => IsMouse(device, customMouse), null, d => !IsPhoneLike(d));
         BatteryDevice? headphones = Pick(devices, device => IsHeadphones(device, customHeadphones), mouse, d => !IsPhoneLike(d));
@@ -97,18 +150,20 @@ public sealed class StatusService : ObservableObject, IDisposable
         NetworkBars = ReadNetworkBars();
     }
 
-    private static string[] CustomNames(string valueName)
+    private static void ReadCustomNames(out string[] mouse, out string[] headphones)
     {
+        mouse = Array.Empty<string>();
+        headphones = Array.Empty<string>();
         try
         {
             using RegistryKey? key = Registry.CurrentUser.OpenSubKey(@"Software\Pill\BatteryNames");
-            if (key?.GetValue(valueName) is not string text) return Array.Empty<string>();
-            return text.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (key is null) return;
+            if (key.GetValue("Mouse") is string mouseText)
+                mouse = mouseText.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (key.GetValue("Headphones") is string headphonesText)
+                headphones = headphonesText.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         }
-        catch
-        {
-            return Array.Empty<string>();
-        }
+        catch { }
     }
 
     private static BatteryDevice? Pick(List<BatteryDevice> devices,
@@ -127,35 +182,19 @@ public sealed class StatusService : ObservableObject, IDisposable
         return null;
     }
 
-    private static bool IsPhoneLike(BatteryDevice device)
-    {
-        return Matches(device.Name, new[]
-        {
-            "phone", "redmi", "iphone", "samsung", "pixel", "huawei", "xiaomi", "телефон"
-        });
-    }
+    private static bool IsPhoneLike(BatteryDevice device) => Matches(device.Name, PhoneKeywords);
 
     private static bool IsMouse(BatteryDevice device, string[] custom)
     {
         if (device.ClassGuid == MouseClass || device.ClassGuid == HidClass) return true;
-        return Matches(device.Name, custom)
-            || Matches(device.Name, new[]
-            {
-                "mouse", "мыш", "trackpad", "touchpad", "mchose", "a7 ultra",
-                "logitech", "mx master", "razer", "steelseries", "deathadder"
-            });
+        return Matches(device.Name, custom) || Matches(device.Name, MouseKeywords);
     }
 
     private static bool IsHeadphones(BatteryDevice device, string[] custom)
     {
         if (IsPhoneLike(device) && !Matches(device.Name, custom)) return false;
         if (device.ClassGuid == MediaClass || device.ClassGuid == AudioEndpointClass) return true;
-        return Matches(device.Name, custom)
-            || Matches(device.Name, new[]
-            {
-                "headphone", "headset", "наушник", "гарнитур", "earbud", "buds",
-                "airpods", "audio", "hands-free", "handsfree", "mic", "микрофон"
-            });
+        return Matches(device.Name, custom) || Matches(device.Name, HeadphonesKeywords);
     }
 
     private static bool Matches(string name, IEnumerable<string> keywords)
@@ -250,10 +289,19 @@ public sealed class StatusService : ObservableObject, IDisposable
         }
     }
 
-    private void UpdateListeningText()
+    private void UpdateListeningText() => ListeningText = FormatDuration(_listeningSeconds);
+
+    private static string FormatDuration(long seconds)
     {
-        TimeSpan value = TimeSpan.FromSeconds(_listeningSeconds);
-        ListeningText = $"{(int)value.TotalHours:00}:{value.Minutes:00}:{value.Seconds:00}";
+        TimeSpan value = TimeSpan.FromSeconds(seconds);
+        return $"{(int)value.TotalHours:00}:{value.Minutes:00}:{value.Seconds:00}";
+    }
+
+    private void Persist()
+    {
+        if (_listeningSeconds == _lastPersistedSeconds) return;
+        _lastPersistedSeconds = _listeningSeconds;
+        _persist?.Invoke(_listeningSeconds);
     }
 
     private static List<BatteryDevice> ReadBatteries()
@@ -348,6 +396,7 @@ public sealed class StatusService : ObservableObject, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        Persist();
         _clockTimer.Stop();
         _deviceTimer.Stop();
     }

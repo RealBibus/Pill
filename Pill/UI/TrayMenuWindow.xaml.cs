@@ -2,6 +2,7 @@ using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -29,6 +30,7 @@ public partial class TrayMenuWindow : Window
     private readonly LowLevelMouseProc _mouseProc;
     private IntPtr _mouseHook;
     private DispatcherTimer? _outsideTimer;
+    private DispatcherTimer? _weatherTimer;
     private bool _closing;
     private bool _checking;
 
@@ -38,7 +40,7 @@ public partial class TrayMenuWindow : Window
         _viewModel = viewModel;
         _toggleVisibility = toggleVisibility;
         _onExit = onExit;
-        _accentBrush = (SolidColorBrush)Resources["MenuAccentBrush"];
+        _accentBrush = new SolidColorBrush(DefaultAccent);
         _mouseProc = OnMouseHook;
 
         RefreshAccent(_viewModel.AmbientColor);
@@ -55,6 +57,19 @@ public partial class TrayMenuWindow : Window
         BetaToggle.IsChecked = _viewModel.UpdateChannel == "beta";
         BetaToggle.Checked += (_, _) => _viewModel.UpdateChannel = "beta";
         BetaToggle.Unchecked += (_, _) => _viewModel.UpdateChannel = "stable";
+
+        HideInGamesToggle.IsChecked = _viewModel.HideInGames;
+        HideInGamesToggle.Checked += (_, _) => _viewModel.HideInGames = true;
+        HideInGamesToggle.Unchecked += (_, _) => _viewModel.HideInGames = false;
+
+        WeatherCityBox.Text = _viewModel.WeatherCity;
+        WeatherCountryBox.Text = _viewModel.WeatherCountry;
+        DeviceLocationToggle.IsChecked = _viewModel.UseDeviceLocation;
+        DeviceLocationToggle.Checked += (_, _) => _viewModel.UseDeviceLocation = true;
+        DeviceLocationToggle.Unchecked += (_, _) => _viewModel.UseDeviceLocation = false;
+        UpdateUnitButtons();
+        RefreshWeatherText();
+        _viewModel.Weather.PropertyChanged += OnWeatherPropertyChanged;
 
         UpdateNowButton.Click += async (_, _) => await UpdateNowAsync();
         DeferButton.Click += async (_, _) => await DeferAsync();
@@ -74,7 +89,9 @@ public partial class TrayMenuWindow : Window
             UpdateManager.StageProgress -= OnStageProgress;
             UpdateManager.StageCompleted -= OnStageCompleted;
             _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            _viewModel.Weather.PropertyChanged -= OnWeatherPropertyChanged;
             _outsideTimer?.Stop();
+            _weatherTimer?.Stop();
             if (_mouseHook != IntPtr.Zero)
             {
                 UnhookWindowsHookEx(_mouseHook);
@@ -82,6 +99,8 @@ public partial class TrayMenuWindow : Window
             }
         };
     }
+
+    public SolidColorBrush AccentBrush => _accentBrush;
 
     private void RefreshAccent(Color color)
     {
@@ -127,6 +146,74 @@ public partial class TrayMenuWindow : Window
         {
             BetaToggle.IsChecked = _viewModel.UpdateChannel == "beta";
         }
+        else if (e.PropertyName == nameof(MainViewModel.HideInGames))
+        {
+            HideInGamesToggle.IsChecked = _viewModel.HideInGames;
+        }
+    }
+
+    private void OnWeatherPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        => Dispatcher.Invoke(RefreshWeatherText);
+
+    private void RefreshWeatherText()
+    {
+        WeatherValueText.Text = _viewModel.Weather.Temperature + " " + _viewModel.Weather.Condition;
+        string name = _viewModel.Weather.LocationName;
+        WeatherLocationText.Text = string.IsNullOrWhiteSpace(name)
+            ? _viewModel.Weather.LocationStatus
+            : name;
+    }
+
+    private void WeatherField_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (ReferenceEquals(sender, WeatherCityBox))
+            _viewModel.WeatherCity = WeatherCityBox.Text;
+        else
+            _viewModel.WeatherCountry = WeatherCountryBox.Text;
+        ScheduleWeatherReload();
+    }
+
+    private void ScheduleWeatherReload()
+    {
+        _weatherTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
+        _weatherTimer.Tick -= OnWeatherTimerTick;
+        _weatherTimer.Tick += OnWeatherTimerTick;
+        _weatherTimer.Stop();
+        _weatherTimer.Start();
+    }
+
+    private void OnWeatherTimerTick(object? sender, EventArgs e)
+    {
+        _weatherTimer?.Stop();
+        _viewModel.Weather.Reload();
+    }
+
+    private void UnitButton_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is string unit)
+            _viewModel.WeatherUnit = unit;
+        UpdateUnitButtons();
+    }
+
+    private void UpdateUnitButtons()
+    {
+        bool celsius = _viewModel.WeatherUnit != "F";
+        var idle = (Brush)Resources["MenuIdleBrush"];
+        var activeText = new SolidColorBrush(Color.FromArgb(255, 12, 16, 28));
+        var idleText = new SolidColorBrush(Color.FromArgb(242, 255, 255, 255));
+        CelsiusButton.Background = celsius ? _accentBrush : idle;
+        FahrenheitButton.Background = celsius ? idle : _accentBrush;
+        CelsiusButton.Foreground = celsius ? activeText : idleText;
+        FahrenheitButton.Foreground = celsius ? idleText : activeText;
+    }
+
+    private async void DetectLocationButton_Click(object sender, RoutedEventArgs e)
+    {
+        DetectLocationButton.IsEnabled = false;
+        WeatherLocationText.Text = "Requesting location…";
+        bool found = await _viewModel.Weather.RequestDeviceLocationAsync();
+        WeatherLocationText.Text = found ? "Location updated" : "Location unavailable";
+        DetectLocationButton.IsEnabled = true;
     }
 
     private void AmbientHit_MouseUp(object sender, MouseButtonEventArgs e)

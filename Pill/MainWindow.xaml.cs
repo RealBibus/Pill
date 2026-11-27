@@ -2,6 +2,7 @@ using System;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Drawing;
+using System.Runtime.InteropServices;
 using System.Drawing.Drawing2D;
 using System.Windows;
 using System.Windows.Controls;
@@ -11,6 +12,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using Pill.Models;
+using Pill.Native;
 using Pill.Services;
 using Pill.UI;
 using Pill.ViewModels;
@@ -31,14 +33,27 @@ public partial class MainWindow : Window
     private const double CollapsedHeight = 66;
     private const double ExpandedWidth = 480;
     private const double ExpandedHeight = 330;
+    private const int GwlExStyle = -20;
+    private const long WsExTransparent = 0x00000020;
+    private const uint SwpNosize = 0x0001;
+    private const uint SwpNomove = 0x0002;
+    private const uint SwpNozorder = 0x0004;
+    private const uint SwpFramechanged = 0x0020;
+    private const uint EventSystemForeground = 0x0003;
+    private const uint WineventSkipHooksame = 0x0008;
 
     private readonly MainViewModel _viewModel = new();
     private readonly DispatcherTimer _hoverTimer;
     private readonly DispatcherTimer _hoverWatchTimer;
     private readonly DispatcherTimer _collapseTimer;
     private readonly DispatcherTimer _dragLeaveTimer;
+    private readonly DispatcherTimer _gameWatchTimer;
 
     private Storyboard? _stateStoryboard;
+    private IntPtr _foregroundHook;
+    private readonly WinEventDelegate _foregroundProc;
+    private double _dpiX = 1;
+    private double _dpiY = 1;
     private readonly SolidColorBrush _accentBrush =
         new(System.Windows.Media.Color.FromArgb(255, 91, 140, 255));
     private readonly SolidColorBrush _accentBackgroundBrush =
@@ -62,6 +77,9 @@ public partial class MainWindow : Window
     private bool _draggingOut;
     private bool _suppressAutoExpand;
     private bool _exitRequested;
+    private bool _hoverInside;
+    private bool _hiddenByGame;
+    private bool _manuallyHidden;
 
     private ShelfItem? _dragCandidate;
     private Point _dragOrigin;
@@ -69,9 +87,11 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        _foregroundProc = OnForegroundChanged;
         DataContext = _viewModel;
         _viewModel.PropertyChanged += (_, e) =>
         {
+            if (e.PropertyName == nameof(MainViewModel.HasMusic)) UpdateAudioActivity();
             if (e.PropertyName is nameof(MainViewModel.AmbientColor) or nameof(MainViewModel.AmbientColorEnabled))
             {
                 System.Windows.Media.Color main = _viewModel.AmbientColor;
@@ -83,10 +103,10 @@ public partial class MainWindow : Window
         };
         UpdateManager.FadeOutRequested += OnFadeOutRequested;
 
-        _hoverTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(60) };
+        _hoverTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(90) };
         _hoverTimer.Tick += (_, _) => { _hoverTimer.Stop(); Expand(); };
 
-        _hoverWatchTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(60) };
+        _hoverWatchTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
         _hoverWatchTimer.Tick += OnHoverWatchTick;
         _hoverWatchTimer.Start();
 
@@ -102,15 +122,34 @@ public partial class MainWindow : Window
             ScheduleCollapse(_viewModel.HasShelfItems ? 1800 : 160);
         };
 
-        SourceInitialized += (_, _) => PositionAtTopCenter();
+        _gameWatchTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1200) };
+        _gameWatchTimer.Tick += OnGameWatchTick;
+
+        SourceInitialized += (_, _) =>
+        {
+            DpiScale dpi = VisualTreeHelper.GetDpi(this);
+            _dpiX = dpi.DpiScaleX;
+            _dpiY = dpi.DpiScaleY;
+            PositionAtTopCenter();
+            SetClickThrough(true);
+            _foregroundHook = SetWinEventHook(EventSystemForeground, EventSystemForeground,
+                IntPtr.Zero, _foregroundProc, 0, 0, WineventSkipHooksame);
+            _gameWatchTimer.Start();
+        };
         Loaded += (_, _) =>
         {
             PositionAtTopCenter();
-            _viewModel.SetColorExclusion((int)Left, (int)Top, (int)Width, (int)Height);
             _viewModel.Start();
             SetupTray();
         };
         Closing += MainWindow_Closing;
+    }
+
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        _dpiX = newDpi.DpiScaleX;
+        _dpiY = newDpi.DpiScaleY;
     }
 
     private void PositionAtTopCenter()
@@ -121,10 +160,13 @@ public partial class MainWindow : Window
 
     private void Expand()
     {
-        if (_expanded || _suppressAutoExpand) return;
+        if (_expanded || _suppressAutoExpand || _hiddenByGame) return;
         _expanded = true;
+        SetClickThrough(false);
         ExpandedRoot.IsHitTestVisible = true;
         CompactRoot.IsHitTestVisible = false;
+        _viewModel.SetExpanded(true);
+        UpdateAudioActivity();
 
         AnimateState(ExpandedWidth, ExpandedHeight, compactOpacity: 0, expandedOpacity: 1, expand: true);
     }
@@ -135,8 +177,11 @@ public partial class MainWindow : Window
         if (!_expanded) return;
 
         _expanded = false;
+        SetClickThrough(true);
         ExpandedRoot.IsHitTestVisible = false;
         CompactRoot.IsHitTestVisible = true;
+        _viewModel.SetExpanded(false);
+        UpdateAudioActivity();
 
         AnimateState(CollapsedWidth, CollapsedHeight, compactOpacity: 1, expandedOpacity: 0, expand: false);
     }
@@ -252,10 +297,16 @@ public partial class MainWindow : Window
 
     private void OnHoverWatchTick(object? sender, EventArgs e)
     {
-        if (!IsVisible || !_expanded || _dragActive || _draggingOut) return;
+        if (!IsVisible || _hiddenByGame || _manuallyHidden || _dragActive || _draggingOut) return;
 
-        Point position = Mouse.GetPosition(this);
-        bool inside = PillBounds().Contains(position);
+        bool inside = IsCursorInsidePill();
+        if (inside != _hoverInside)
+        {
+            if (inside) HandleHoverEnter();
+            else HandleHoverLeave();
+        }
+
+        if (!_expanded || _dragActive || _draggingOut) return;
 
         if (inside)
         {
@@ -265,28 +316,110 @@ public partial class MainWindow : Window
         {
             int delay = _viewModel.HasShelfItems ? 1800 : _viewModel.AutoHideMs;
             if (delay > 0) ScheduleCollapse(delay);
-            else _collapseTimer.Stop();
         }
     }
 
-    private void Root_MouseEnter(object sender, MouseEventArgs e)
+    private bool IsCursorInsidePill()
     {
+        if (!GetCursorPos(out NativePoint point)) return false;
+        if (point.X < (Left - 40) * _dpiX || point.X > (Left + ExpandedWidth + 40) * _dpiX ||
+            point.Y < (Top - 40) * _dpiY || point.Y > (Top + ExpandedHeight + 40) * _dpiY)
+            return false;
+
+        var position = new Point(point.X / _dpiX, point.Y / _dpiY);
+        Rect bounds = PillBounds();
+        return new Rect(Left + bounds.Left, Top + bounds.Top, bounds.Width, bounds.Height).Contains(position);
+    }
+
+    private void HandleHoverEnter()
+    {
+        if (_hoverInside) return;
+        _hoverInside = true;
         _hoverTimer.Stop();
         _dragLeaveTimer.Stop();
         _collapseTimer.Stop();
         _suppressAutoExpand = false;
-        if (_viewModel.AutoExpand && !_expanded) _hoverTimer.Start();
+        if (_viewModel.AutoExpand && !_expanded && !_hiddenByGame) _hoverTimer.Start();
     }
+
+    private void HandleHoverLeave()
+    {
+        if (!_hoverInside) return;
+        _hoverInside = false;
+        _hoverTimer.Stop();
+        if (_draggingOut || _dragActive) return;
+        int delay = _viewModel.HasShelfItems ? 1800 : _viewModel.AutoHideMs;
+        if (delay > 0) ScheduleCollapse(delay);
+    }
+
+    private void Root_MouseEnter(object sender, MouseEventArgs e) => HandleHoverEnter();
 
     private void Root_MouseLeave(object sender, MouseEventArgs e)
     {
-        _hoverTimer.Stop();
-        if (_draggingOut || _dragActive) return;
-
         if (PillBounds().Contains(e.GetPosition(this))) return;
+        HandleHoverLeave();
+    }
 
-        int delay = _viewModel.HasShelfItems ? 1800 : _viewModel.AutoHideMs;
-        if (delay > 0) ScheduleCollapse(delay);
+    private void SetClickThrough(bool enabled)
+    {
+        IntPtr hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd == IntPtr.Zero) return;
+        IntPtr style = GetWindowLongPtr(hwnd, GwlExStyle);
+        long value = style.ToInt64();
+        value = enabled ? value | WsExTransparent : value & ~WsExTransparent;
+        SetWindowLongPtr(hwnd, GwlExStyle, new IntPtr(value));
+        SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0,
+            SwpNosize | SwpNomove | SwpNozorder | SwpFramechanged);
+    }
+
+    private void UpdateAudioActivity()
+        => Waveform.RenderEnabled = _expanded && !_hiddenByGame && !_manuallyHidden && _viewModel.HasMusic;
+
+    private void SetSuspended(bool suspended)
+    {
+        _viewModel.SetSuspended(suspended);
+        UpdateAudioActivity();
+        if (suspended)
+        {
+            _hoverWatchTimer.Stop();
+            _hoverTimer.Stop();
+            _collapseTimer.Stop();
+            _trayMenuWindow?.Close();
+        }
+        else if (IsVisible)
+        {
+            _hoverWatchTimer.Start();
+        }
+    }
+
+    private void OnForegroundChanged(IntPtr hWinEventHook, uint eventType, IntPtr hwnd,
+        int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
+        => Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (_viewModel.HideInGames) OnGameWatchTick(this, EventArgs.Empty);
+        }));
+
+    private void OnGameWatchTick(object? sender, EventArgs e)
+    {
+        bool hide = _viewModel.HideInGames &&
+                    FullscreenWatcher.IsFullscreenGame(new WindowInteropHelper(this).Handle);
+        if (hide == _hiddenByGame) return;
+
+        _hiddenByGame = hide;
+        if (hide)
+        {
+            _hoverInside = false;
+            SetSuspended(true);
+            Collapse(force: true);
+            if (IsVisible) Hide();
+            return;
+        }
+
+        if (_manuallyHidden) return;
+        Show();
+        PositionAtTopCenter();
+        SetClickThrough(!_expanded);
+        SetSuspended(false);
     }
 
     private void Root_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -481,13 +614,19 @@ public partial class MainWindow : Window
     {
         if (IsVisible)
         {
+            _manuallyHidden = true;
+            SetSuspended(true);
             Hide();
             return;
         }
 
+        _manuallyHidden = false;
+        _hiddenByGame = false;
         Show();
         PositionAtTopCenter();
         _suppressAutoExpand = false;
+        SetClickThrough(!_expanded);
+        SetSuspended(false);
         Expand();
     }
 
@@ -527,7 +666,13 @@ public partial class MainWindow : Window
         _hoverWatchTimer.Stop();
         _collapseTimer.Stop();
         _dragLeaveTimer.Stop();
+        _gameWatchTimer.Stop();
         _stateStoryboard?.Stop(this);
+        if (_foregroundHook != IntPtr.Zero)
+        {
+            UnhookWinEvent(_foregroundHook);
+            _foregroundHook = IntPtr.Zero;
+        }
         UpdateManager.FadeOutRequested -= OnFadeOutRequested;
 
         if (_trayMenuWindow is { IsVisible: true }) _trayMenuWindow.Close();
@@ -544,6 +689,48 @@ public partial class MainWindow : Window
 
         _viewModel.Dispose();
     }
+
+    private delegate void WinEventDelegate(IntPtr hWinEventHook, uint eventType, IntPtr hwnd,
+        int idObject, int idChild, uint dwEventThread, uint dwmsEventTime);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SetWinEventHook(uint eventMin, uint eventMax, IntPtr hmodWinEventProc,
+        WinEventDelegate lpfnWinEventProc, uint idProcess, uint idThread, uint dwflags);
+
+    [DllImport("user32.dll")]
+    private static extern bool UnhookWinEvent(IntPtr hWinEventHook);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint
+    {
+        public int X;
+        public int Y;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out NativePoint point);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLong")]
+    private static extern IntPtr GetWindowLong32(IntPtr hWnd, int index);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtr")]
+    private static extern IntPtr GetWindowLong64(IntPtr hWnd, int index);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLong")]
+    private static extern IntPtr SetWindowLong32(IntPtr hWnd, int index, IntPtr value);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtr")]
+    private static extern IntPtr SetWindowLong64(IntPtr hWnd, int index, IntPtr value);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr insertAfter, int x, int y,
+        int cx, int cy, uint flags);
+
+    private static IntPtr GetWindowLongPtr(IntPtr hWnd, int index)
+        => IntPtr.Size == 8 ? GetWindowLong64(hWnd, index) : GetWindowLong32(hWnd, index);
+
+    private static IntPtr SetWindowLongPtr(IntPtr hWnd, int index, IntPtr value)
+        => IntPtr.Size == 8 ? SetWindowLong64(hWnd, index, value) : SetWindowLong32(hWnd, index, value);
 
     private static TrayIcon CreateTrayIcon()
     {

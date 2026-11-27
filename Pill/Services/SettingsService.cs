@@ -14,6 +14,12 @@ public sealed class AppSettings
     public int AutoHideMs { get; set; } = 180;
     public double EqualizerGain { get; set; } = 1.0;
     public double WaveformGain { get; set; } = 1.0;
+    public long ListeningSeconds { get; set; }
+    public string WeatherCity { get; set; } = "";
+    public string WeatherCountry { get; set; } = "";
+    public string WeatherUnit { get; set; } = "C";
+    public bool UseDeviceLocation { get; set; }
+    public bool HideInGames { get; set; } = true;
 }
 
 public static class SettingsService
